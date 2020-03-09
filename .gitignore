@@ -128,6 +128,12 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# Old files
+CartPole/
+Common/HardMemoryManager.py
+main.py
+CartPoleAgent.py
+
 # Old and new weights
 mniejszy/
 Pierwotny_model/
