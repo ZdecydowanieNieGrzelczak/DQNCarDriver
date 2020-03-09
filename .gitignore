@@ -134,3 +134,6 @@ Pierwotny_model/
 singlePackage/
 *.json
 *.h5
+
+# PyChar
+.idea/
