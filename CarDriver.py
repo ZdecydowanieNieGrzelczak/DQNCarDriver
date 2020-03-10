@@ -294,7 +294,7 @@ if continue_learning:
     brain.target_critic_model.load_weights("critic_model_weights.h5")
     print("loaded")
 
-# init_memory(agent, 50)
+init_memory(agent, 10)
 
 
 

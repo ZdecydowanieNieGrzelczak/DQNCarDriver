@@ -51,7 +51,7 @@ class TreeMemory(object):
     alpha = 0.6  # [0~1] convert the importance of TD error to priority
     beta = 0.4  # importance-sampling, from initial value increasing to 1
     beta_increment_per_sampling = 1e-4  # annealing the bias
-    abs_err_upper = 1   # for stability refer to paper
+    abs_err_upper = 8   # for stability refer to paper
 
     def __init__(self, size):
         self.tree = SumTree(size)
@@ -66,7 +66,7 @@ class TreeMemory(object):
         segment = self.tree.root_priority / n
         self.beta = np.min([1, self.beta + self.beta_increment_per_sampling])  # max = 1
 
-        min_prob = np.min(self.tree.tree[-self.tree.capacity:]) / self.tree.root_priority
+        min_prob = np.min(self.tree.tree[-self.tree.capacity:]) / self.tree.root_priority + self.epsilon
         maxiwi = np.power(self.tree.capacity * min_prob, -self.beta)  # for later normalizing ISWeights
         for i in range(n):
             a = segment * i
@@ -92,8 +92,9 @@ class TreeMemory(object):
         self.tree.update(idx, p)
 
     def _get_priority(self, error):
+        error = np.abs(error)
         error += self.epsilon  # avoid 0
-        clipped_error = np.clip(error, 0, self.abs_err_upper)
+        clipped_error = min(error, self.abs_err_upper)
         return np.power(clipped_error, self.alpha)
 
 
