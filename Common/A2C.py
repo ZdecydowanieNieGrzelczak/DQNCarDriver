@@ -44,6 +44,8 @@ class ActorCritic():
 
         self.actor_critic_grad = K.placeholder([None, self.action_space], dtype=tf.float32)
 
+        self.Is_weight = K.placeholder(1, dtype=tf.float64)
+
         actor_model_weights = self.actor_model.trainable_weights
         self.actor_grads = tf.gradients(self.actor_model.output, actor_model_weights, -self.actor_critic_grad)
         grads = zip(self.actor_grads, actor_model_weights)
@@ -92,11 +94,13 @@ class ActorCritic():
     def train(self, batch):
         rewards = []
         self._train_critic(batch)
-        self._train_actor(batch)
+        grads = self._train_actor(batch)
         self.update_targets()
+        return grads
 
-    def _train_critic(self, samples):
+    def _train_critic(self, batch):
         rewards, states, actions = [], [], []
+        batch_idx, samples, ISWeights = batch
         for sample in samples:
             cur_state, action, reward, new_state, done = sample
             action_arr = np.zeros(shape=(self.action_space))
@@ -108,22 +112,27 @@ class ActorCritic():
             actions.append(action_arr)
             rewards.append(reward)
             states.append(encode_state(cur_state))
-        self.critic_model.fit([states, actions], rewards, epochs=10, verbose=0, batch_size=len(samples))
+        self.critic_model.fit([states, actions], rewards, epochs=10, verbose=0, batch_size=len(samples), sample_weight=ISWeights)
 
-    def _train_actor(self, samples):
+    def _train_actor(self, batch):
+        tree_index, samples, ISWeights = batch
         grads_list = []
-        for sample in samples:
+        for i in range(len(samples)):
+            sample = samples[i]
+            ISWeight = ISWeights[i]
             cur_state, action, reward, new_state, _ = sample
             predicted_action = self.actor_model.predict(np.array(([encode_state(cur_state)])))
             grads = self.sess.run(self.critic_grads, feed_dict={
                 self.critic_state_input: [encode_state(cur_state)], self.critic_action_input: predicted_action
             })[0]
+            weighted_grads = ISWeight * grads
             grads_list.append(np.sum(grads))
             self.sess.run(self.optimize, feed_dict={
                 self.actor_state_input: [encode_state(cur_state)],
-                self.actor_critic_grad: grads
+                self.actor_critic_grad: weighted_grads
             })
-        print(grads_list)
+        # print(grads_list)
+        return grads_list
 
     def update_targets(self):
         self._update_actor_target()

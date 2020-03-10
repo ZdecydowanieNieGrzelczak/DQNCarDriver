@@ -3,7 +3,7 @@ import random, math
 import keras
 import numpy as np
 from Common.Brain import Brain
-from Common.Memory import Memory
+from Common.Memory import Memory, TreeMemory
 from map import Game
 import time
 import threading
@@ -41,6 +41,10 @@ class Agent:
 
     def observe(self, sample):
         self.memory.add(sample)
+
+    def observe_with_priority(self, sample):
+        max_p = np.max(self.memory.tree.tree[-self.memory.tree.capacity:])
+        self.memory.store(max_p, sample)
 
     def replay(self):
         batch = self.memory.sample_batch(self.batch_size)
@@ -100,14 +104,17 @@ class Agent:
             total_reward += reward
             if is_done:
                 next_state = None
-            self.observe((state, action, reward, next_state, is_done))
-
+            self.observe_with_priority((state, action, reward, next_state, is_done))
 
             state = next_state
             if is_done:
                 break
         if should_replay:
-            brain.train(memory.sample_batch(batch_size))
+            batch = memory.sample_batch(batch_size)
+            errors = brain.train(batch)
+            tree_idx = batch[0]
+            for i in range(len(errors)):
+                memory.tree.update(tree_idx[i], errors[i])
         if not silent:
             print("Counter : ", counter)
         return total_reward
@@ -158,7 +165,7 @@ def run_agent():
             print("Current reward: ", reward)
             print("Best reward: ", math.floor(max_reward))
             print("Best of this episode: ", math.floor(best_out_of_ten))
-            print("Len of memory: ", len(memory))
+            # print("Len of memory: ", len(memory))
             print("The questes: T:", stats[0], " P:", stats[1], " C:", stats[2], " out of: ", synchronise_every )
             print("_____________________")
             stats = [0, 0, 0]
@@ -208,17 +215,6 @@ def learn_and_sync():
         learn(loaded_model, target)
         target.set_weights(loaded_model.get_weights())
         synch_model.set_weights(loaded_model.get_weights())
-        print("Synch")
-        print("Synch")
-        print("Synch")
-        print("Synch")
-        print("Synch")
-        print("Synch")
-        print("Synch")
-        print("Synch")
-        print("Synch")
-        print("Synch")
-        print("Synch")
         print("Synch")
 
 
@@ -279,7 +275,8 @@ sess = tf.compat.v1.Session()
 
 
 environment = Game()
-memory = Memory(10000000)
+# memory = Memory(10000000)
+memory = TreeMemory(10000000)
 learning_rate = 0.002
 # brain = Brain(environment.state_count, environment.action_count, learning_rate=learning_rate)
 brain = ActorCritic(sess, environment.action_count, environment.state_count, tau=0.95 )
@@ -297,7 +294,7 @@ if continue_learning:
     brain.target_critic_model.load_weights("critic_model_weights.h5")
     print("loaded")
 
-init_memory(agent, 50)
+# init_memory(agent, 50)
 
 
 
