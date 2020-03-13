@@ -100,20 +100,28 @@ class ActorCritic():
 
     def _train_critic(self, batch):
         rewards, states, actions = [], [], []
-        batch_idx, samples, ISWeights = batch
-        for sample in samples:
-            cur_state, action, reward, new_state, done = sample
-            action_arr = np.zeros(shape=(self.action_space))
-            action_arr[action] = 1
-            if not done:
-                target_action = self.target_actor_model.predict(np.array(([encode_state(new_state)])))
-                future_reward = self.target_critic_model.predict([np.array(([encode_state(new_state)])), target_action])[0][0]
-                reward += self.discount * future_reward
-            actions.append(action_arr)
-            rewards.append(reward)
-            states.append(encode_state(cur_state))
-        self.critic_model.fit([states, actions], rewards, epochs=10, verbose=0, batch_size=len(samples), sample_weight=ISWeights)
-
+        try:
+            batch_idx, samples, ISWeights = batch
+            for i in range(len(samples)):
+                sample = samples[i]
+                try:
+                    cur_state, action, reward, new_state, done = sample
+                except:
+                    print("sample", sample)
+                    print("iterator: ", i)
+                action_arr = np.zeros(shape=(self.action_space))
+                action_arr[action] = 1
+                if not done:
+                    target_action = self.target_actor_model.predict(np.array(([encode_state(new_state)])))
+                    future_reward = self.target_critic_model.predict([np.array(([encode_state(new_state)])), target_action])[0][0]
+                    reward += self.discount * future_reward
+                actions.append(action_arr)
+                rewards.append(reward)
+                states.append(encode_state(cur_state))
+            self.critic_model.fit([states, actions], rewards, epochs=10, verbose=0, batch_size=len(samples), sample_weight=ISWeights)
+        except:
+            print(batch, "batch")
+            print("sample", sample)
     def _train_actor(self, batch):
         tree_index, samples, ISWeights = batch
         grads_list = []

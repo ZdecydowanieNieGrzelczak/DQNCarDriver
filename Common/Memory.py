@@ -1,7 +1,9 @@
 import random
 import time
 import numpy as np
-
+import copy
+import threading
+import scipy
 
 class Memory:
     """
@@ -80,7 +82,7 @@ class TreeMemory(object):
 
         # ISWeights = np.vstack(ISWeights)
         ISWeights = np.power(ISWeights, -self.beta) / maxiwi  # normalize
-        return batch_idx, np.vstack(batch_memory), ISWeights
+        return (batch_idx, batch_memory, ISWeights)
 
     def update_whole_list(self, indexes, errors):
         for idx, error in indexes, errors:
@@ -112,6 +114,7 @@ class SumTree(object):
         #             size: capacity
 
     def add_new_priority(self, p, data):
+        # leaf_idx = self.data_pointer
         leaf_idx = self.data_pointer + self.capacity - 1
 
         self.data[self.data_pointer] = data  # update data_frame
@@ -168,3 +171,95 @@ class SumTree(object):
     @property
     def root_priority(self):
         return self.tree[0]  # the root
+
+
+class VectorizedMemory:
+    min_priority = 0.0001
+    max_priority = 0.0001
+    start = 0
+    end = 0
+    random.seed(time.time())
+    next_batch = None
+    is_ready = False
+    alpha = 0
+    beta = 0
+
+    def __init__(self, size, use_slices=True):
+        self.data = [None] * (size + 1)
+        self.priority_buffer = np.zeros(shape=(size + 1))
+        self.use_slices = use_slices
+        self.batch_golden_retriever = threading.Thread(target=self.sample_with_priority, daemon=True)
+
+    def append(self, element):
+        self.data[self.end] = element
+        self.priority_buffer[self.end] = self.max_priority
+        self.end = (self.end + 1) % len(self.data)
+        if self.end == self.start:
+            self.start = (self.start + 1) % len(self.data)
+
+    def __getitem__(self, item):
+        return self.data[(self.start + item) % len(self.data)]
+
+    def __len__(self):
+        if self.end < self.start:
+            return self.end + len(self.data) - self.start
+        else:
+            return self.end - self.start
+
+    def __iter__(self):
+        for i in range(len(self)):
+            yield self[i]
+
+    def add(self, element):
+        self.append(element)
+
+    def update_priority(self, index, priority):
+        if priority > self.max_priority:
+            self.max_priority = priority
+        self.priority_buffer[index] = priority
+
+    def sample_with_priority(self, batch_size):
+        probability_matrix = copy.deepcopy(self.priority_buffer)
+        data = copy.deepcopy(self.data)
+        if self.end > self.start:
+            indexes, ISWeights = self.vectorized(probability_matrix[:self.end], batch_size)
+        else:
+            indexes, ISWeights = self.vectorized(probability_matrix, batch_size)
+        self.next_batch = [data[indexes], indexes, ISWeights]
+        self.is_ready = True
+
+    def vectorized(self, prob_matrix, batch_size):
+        s = scipy.linalg.fractional_matrix_power(prob_matrix.cumsum(axis=0), self.alpha)
+        r = scipy.linalg.fractional_matrix_power((np.random.rand(prob_matrix.shape[0]) * self.max_priority), self.alpha)
+        k = (s < r).sum(axis=0)
+        probabilities = s[k]
+        while len(k) < batch_size:
+            s[k] = 0
+            r = scipy.linalg.fractional_matrix_power((np.random.rand(prob_matrix.shape[0]) * np.amax(s), self.alpha))
+            k2 =(s < r).sum(axis=0)
+            probabilities.append(s[k2])
+            k.append(k2)
+
+        if len(k) > batch_size:
+            difference = len(k) - batch_size
+            if self.use_slices:
+                k = k[:-difference]
+                probabilities = probabilities[:-difference]
+
+            else:
+                new_k = np.asarray(k)
+                k = np.delete(k, (np.random.choice(new_k, difference, replace=False)))
+        ISWeights = scipy.linalg.fractional_matrix_power(((1 / len(self)) * (1 / probabilities)), self.beta)
+        return k, ISWeights
+
+    def run_for_batch(self, alpha, beta, batch_size):
+        self.alpha = alpha
+        self.beta = beta
+        self.is_ready = False
+        self.batch_golden_retriever.run(batch_size)
+        return self.next_batch
+
+    # def numpy_sampling(self, probability_matrix, batch_size):
+    #     probability_matrix /= self.max_priority # normalize
+    #     k = np.random.choice(self.data, batch_size, replace=False, p=probability_matrix)
+    #     return k

@@ -3,7 +3,7 @@ import random, math
 import keras
 import numpy as np
 from Common.Brain import Brain
-from Common.Memory import Memory, TreeMemory
+from Common.Memory import Memory, TreeMemory, VectorizedMemory
 from map import Game
 import time
 import threading
@@ -110,7 +110,7 @@ class Agent:
             if is_done:
                 break
         if should_replay:
-            batch = memory.sample_batch(batch_size)
+            batch = memory.run_for_batch(batch_size)
             errors = brain.train(batch)
             tree_idx = batch[0]
             for i in range(len(errors)):
@@ -276,10 +276,11 @@ sess = tf.compat.v1.Session()
 
 environment = Game()
 # memory = Memory(10000000)
-memory = TreeMemory(10000000)
+# memory = TreeMemory(10000000)
+memory = VectorizedMemory(10000000)
 learning_rate = 0.002
 # brain = Brain(environment.state_count, environment.action_count, learning_rate=learning_rate)
-brain = ActorCritic(sess, environment.action_count, environment.state_count, tau=0.95 )
+brain = ActorCritic(sess, environment.action_count, environment.state_count, tau=0.95)
 agent = Agent(brain, memory, environment)
 max_steps = 5000
 max_reward = -100000

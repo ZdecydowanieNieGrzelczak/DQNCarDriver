@@ -1,5 +1,5 @@
 import random, time
-
+import numpy as np
 
 class Game:
     def __init__(self):
@@ -163,7 +163,4 @@ class Game:
         print("")
         print("")
         print("")
-
-
-
 
