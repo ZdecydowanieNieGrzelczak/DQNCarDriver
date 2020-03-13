@@ -31,6 +31,13 @@ class Agent:
         else:
             return 0.001
 
+    def getAB(self):
+        if self.iteration < self.iteration_limit:
+            current_progress = (self.iteration / self.iteration_limit)
+            return alpha_min + (alpha_max - alpha_min) * current_progress, beta_min + (beta_max - beta_min) * current_progress
+        else:
+            return alpha_max, beta_max
+
     def act(self, state):
         if random.random() > self.get_current_epsilon():
             state = self.encode_state(state)
@@ -43,8 +50,8 @@ class Agent:
         self.memory.add(sample)
 
     def observe_with_priority(self, sample):
-        max_p = np.max(self.memory.tree.tree[-self.memory.tree.capacity:])
-        self.memory.store(max_p, sample)
+        # max_p = np.max(self.memory.tree.tree[-self.memory.tree.capacity:])
+        self.memory.add(sample)
 
     def replay(self):
         batch = self.memory.sample_batch(self.batch_size)
@@ -110,11 +117,14 @@ class Agent:
             if is_done:
                 break
         if should_replay:
-            batch = memory.run_for_batch(batch_size)
+            alpha, beta = self.getAB()
+            while not memory.is_ready:
+                time.sleep(0.005)
+            batch = memory.run_for_batch(alpha, beta)
             errors = brain.train(batch)
             tree_idx = batch[0]
             for i in range(len(errors)):
-                memory.tree.update(tree_idx[i], errors[i])
+                memory.update_priority(tree_idx[i], errors[i])
         if not silent:
             print("Counter : ", counter)
         return total_reward
@@ -274,10 +284,17 @@ sess = tf.compat.v1.Session()
 # K.set_session(sess)
 
 
+#########################
+#           MEMORY
+alpha_min = 0.4
+alpha_max = 1
+beta_min = 0.001
+beta_max = 1
+
 environment = Game()
 # memory = Memory(10000000)
 # memory = TreeMemory(10000000)
-memory = VectorizedMemory(10000000)
+memory = VectorizedMemory(3000000)
 learning_rate = 0.002
 # brain = Brain(environment.state_count, environment.action_count, learning_rate=learning_rate)
 brain = ActorCritic(sess, environment.action_count, environment.state_count, tau=0.95)

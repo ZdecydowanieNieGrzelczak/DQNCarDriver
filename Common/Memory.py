@@ -184,11 +184,12 @@ class VectorizedMemory:
     alpha = 0
     beta = 0
 
-    def __init__(self, size, use_slices=True):
+    def __init__(self, size, use_slices=True, batch_size=2048):
         self.data = [None] * (size + 1)
         self.priority_buffer = np.zeros(shape=(size + 1))
         self.use_slices = use_slices
         self.batch_golden_retriever = threading.Thread(target=self.sample_with_priority, daemon=True)
+        self.batch_size = 2048
 
     def append(self, element):
         self.data[self.end] = element
@@ -218,30 +219,33 @@ class VectorizedMemory:
             self.max_priority = priority
         self.priority_buffer[index] = priority
 
-    def sample_with_priority(self, batch_size):
+    def sample_with_priority(self):
         probability_matrix = copy.deepcopy(self.priority_buffer)
         data = copy.deepcopy(self.data)
         if self.end > self.start:
-            indexes, ISWeights = self.vectorized(probability_matrix[:self.end], batch_size)
+            indexes, ISWeights = self.vectorized(probability_matrix[:self.end])
         else:
-            indexes, ISWeights = self.vectorized(probability_matrix, batch_size)
-        self.next_batch = [data[indexes], indexes, ISWeights]
+            indexes, ISWeights = self.vectorized(probability_matrix)
+        self.next_batch = [indexes, data[indexes], ISWeights]
         self.is_ready = True
 
-    def vectorized(self, prob_matrix, batch_size):
-        s = scipy.linalg.fractional_matrix_power(prob_matrix.cumsum(axis=0), self.alpha)
-        r = scipy.linalg.fractional_matrix_power((np.random.rand(prob_matrix.shape[0]) * self.max_priority), self.alpha)
+    def vectorized(self, prob_matrix):
+        s = np.float_power(prob_matrix.cumsum(axis=0), self.alpha)
+        # s = scipy.linalg.fractional_matrix_power(prob_matrix.cumsum(axis=0), self.alpha)
+        # r = scipy.linalg.fractional_matrix_power((np.random.rand(prob_matrix.shape[0]) * self.max_priority), self.alpha)
+        r = np.float_power((np.random.rand(prob_matrix.shape[0]) * self.max_priority), self.alpha)
         k = (s < r).sum(axis=0)
         probabilities = s[k]
-        while len(k) < batch_size:
+        while len(k) < self.batch_size:
             s[k] = 0
-            r = scipy.linalg.fractional_matrix_power((np.random.rand(prob_matrix.shape[0]) * np.amax(s), self.alpha))
+            r = np.float_power((np.random.rand(prob_matrix.shape[0]) * np.amax(s)), self.alpha)
+            # r = scipy.linalg.fractional_matrix_power((np.random.rand(prob_matrix.shape[0]) * np.amax(s), self.alpha))
             k2 =(s < r).sum(axis=0)
             probabilities.append(s[k2])
             k.append(k2)
 
-        if len(k) > batch_size:
-            difference = len(k) - batch_size
+        if len(k) > self.batch_size:
+            difference = len(k) - self.batch_size
             if self.use_slices:
                 k = k[:-difference]
                 probabilities = probabilities[:-difference]
@@ -252,11 +256,11 @@ class VectorizedMemory:
         ISWeights = scipy.linalg.fractional_matrix_power(((1 / len(self)) * (1 / probabilities)), self.beta)
         return k, ISWeights
 
-    def run_for_batch(self, alpha, beta, batch_size):
+    def run_for_batch(self, alpha, beta):
         self.alpha = alpha
         self.beta = beta
         self.is_ready = False
-        self.batch_golden_retriever.run(batch_size)
+        self.batch_golden_retriever.run()
         return self.next_batch
 
     # def numpy_sampling(self, probability_matrix, batch_size):
