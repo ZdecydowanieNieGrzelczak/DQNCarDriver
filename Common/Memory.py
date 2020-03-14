@@ -8,6 +8,141 @@ import threading
 from operator import itemgetter
 
 
+
+
+class VectorizedMemory:
+    min_priority = 0.0001
+    max_priority = 1
+    start = 0
+    end = 0
+    random.seed(time.time())
+    next_batch = None
+    is_ready = False
+    alpha = 0
+    beta = 0
+    working_data = None
+    working_priority = None
+    delay = 0.005
+    large_delay = 0.02
+    batch_queue = Queue(5)
+    _datalock = False
+    working_alpha = 0
+    working_beta = 0
+
+    def __init__(self, size, use_slices=True, batch_size=2048, gamma=4):
+        self.data = [None] * (size + 1)
+        self.priority_buffer = np.zeros(shape=(size + 1))
+        self.use_slices = use_slices
+        self.batch_golden_retriever = threading.Thread(target=self.batch_preparer, daemon=True)
+        self.batch_size = batch_size
+        self.gamma = gamma
+
+    def append(self, element):
+        while(self._datalock):
+            time.sleep(self.delay)
+        self.data[self.end] = element
+        self.priority_buffer[self.end] = self.max_priority
+        self.end = (self.end + 1) % len(self.data)
+
+        if self.end == self.start:
+            self.start = (self.start + 1) % len(self.data)
+
+    def __getitem__(self, item):
+        return self.data[(self.start + item) % len(self.data)]
+
+    def __len__(self):
+        if self.end < self.start:
+            return self.end + len(self.data) - self.start
+        else:
+            return self.end - self.start
+
+    def __iter__(self):
+        for i in range(len(self)):
+            yield self[i]
+
+    def add(self, element):
+        self.append(element)
+
+    def update_priority(self, index, error):
+        priority = np.clip(error / self.gamma, self.min_priority, self.max_priority)
+        self.priority_buffer[index] = priority
+
+    def batch_preparer(self):
+        while True:
+            if self.batch_queue.full():
+                time.sleep(self.large_delay)
+            else:
+                self._datalock = True
+                if self.end > self.start:
+                    self.working_data = copy.deepcopy(self.data[:self.end])
+                    self.working_priority = copy.deepcopy(self.priority_buffer[:self.end])
+                else:
+                    self.working_data = copy.deepcopy(self.data)
+                    self.working_priority = copy.deepcopy(self.priority_buffer)
+                self._datalock = False
+                self.working_alpha = self.alpha
+                self.working_beta = self.beta
+                self.sample_with_priority()
+
+    def sample_with_priority(self):
+        indexes, ISWeights = self.vectorized(self.working_priority)
+        next_data = list(itemgetter(*indexes)(self.working_data))
+        next_batch = [indexes, next_data, ISWeights]
+        self.batch_queue.put(next_batch)
+
+
+    def vectorized(self, prob_matrix):
+
+        s = np.float_power(prob_matrix, self.working_alpha)
+        r = np.random.rand(prob_matrix.shape[0])
+        k = np.where(s > r)
+        probabilities = s[k]
+        while np.shape(k)[1] < self.batch_size:
+            s[k] = 1
+            r = np.random.rand(prob_matrix.shape[0])
+            k2 = np.where(s > r)
+            np.append(probabilities, s[k2])
+            np.append(k, k2)
+
+        if np.shape(k)[1] > self.batch_size:
+            difference = np.shape(k)[1] - self.batch_size
+            if self.use_slices:
+                indices = np.arange(np.shape(k)[1])
+                np.random.shuffle(indices)
+                k = k[0][indices]
+                probabilities = probabilities[indices]
+                k = k[:-difference]
+                probabilities = probabilities[:-difference]
+
+            else:
+                new_k = np.asarray(k)
+                k = np.delete(k, (np.random.choice(new_k, difference, replace=False)))
+
+        ISWeights = np.float_power(((1 / len(self)) * (1 / probabilities)), self.working_beta)
+        k = k.tolist()
+
+        return k, ISWeights
+
+    def run_for_batch(self, alpha, beta):
+        self.alpha = alpha
+        self.beta = beta
+        while self.batch_queue.empty():
+            time.sleep(self.delay)
+        batch = self.batch_queue.get()
+        return batch
+
+
+
+#####################################################################################
+#                                                                                   #
+#                                                                                   #
+#                                                                                   #
+#                                      DEPRECIATED                                  #
+#                                                                                   #
+#                                                                                   #
+#                                                                                   #
+#####################################################################################
+
 class Memory:
     """
     Simple ring buffer for storage of data that will be used while "replaying"
@@ -174,128 +309,3 @@ class SumTree(object):
     @property
     def root_priority(self):
         return self.tree[0]  # the root
-
-
-class VectorizedMemory:
-    min_priority = 0.0001
-    max_priority = 1
-    start = 0
-    end = 0
-    random.seed(time.time())
-    next_batch = None
-    is_ready = False
-    alpha = 0
-    beta = 0
-    working_data = None
-    working_priority = None
-    delay = 0.005
-    large_delay = 0.02
-    batch_queue = Queue(5)
-    _datalock = False
-    working_alpha = 0
-    working_beta = 0
-
-    def __init__(self, size, use_slices=True, batch_size=2048, gamma=4):
-        self.data = [None] * (size + 1)
-        self.priority_buffer = np.zeros(shape=(size + 1))
-        self.use_slices = use_slices
-        self.batch_golden_retriever = threading.Thread(target=self.batch_preparer, daemon=True)
-        self.batch_size = batch_size
-        self.gamma = gamma
-
-    def append(self, element):
-        while(self._datalock):
-            time.sleep(self.delay)
-        self.data[self.end] = element
-        self.priority_buffer[self.end] = self.max_priority
-        self.end = (self.end + 1) % len(self.data)
-
-        if self.end == self.start:
-            self.start = (self.start + 1) % len(self.data)
-
-    def __getitem__(self, item):
-        return self.data[(self.start + item) % len(self.data)]
-
-    def __len__(self):
-        if self.end < self.start:
-            return self.end + len(self.data) - self.start
-        else:
-            return self.end - self.start
-
-    def __iter__(self):
-        for i in range(len(self)):
-            yield self[i]
-
-    def add(self, element):
-        self.append(element)
-
-    def update_priority(self, index, error):
-        priority = np.clip(error / self.gamma, self.min_priority, self.max_priority)
-        self.priority_buffer[index] = priority
-
-    def batch_preparer(self):
-        while True:
-            if self.batch_queue.full():
-                time.sleep(self.large_delay)
-            else:
-                self._datalock = True
-                if self.end > self.start:
-                    self.working_data = copy.deepcopy(self.data[:self.end])
-                    self.working_priority = copy.deepcopy(self.priority_buffer[:self.end])
-                else:
-                    self.working_data = copy.deepcopy(self.data)
-                    self.working_priority = copy.deepcopy(self.priority_buffer)
-                self._datalock = False
-                self.working_alpha = self.alpha
-                self.working_beta = self.beta
-                now = time.time()
-                self.sample_with_priority()
-                end = time.time()
-                print("Making a batch takes: ", end - now)
-
-    def sample_with_priority(self):
-        indexes, ISWeights = self.vectorized(self.working_priority)
-        next_data = list(itemgetter(*indexes)(self.working_data))
-        next_batch = [indexes, next_data, ISWeights]
-        self.batch_queue.put(next_batch)
-
-
-    def vectorized(self, prob_matrix):
-
-        s = np.float_power(prob_matrix, self.working_alpha)
-        r = np.random.rand(prob_matrix.shape[0])
-        k = np.where(s > r)
-        probabilities = s[k]
-        while np.shape(k)[1] < self.batch_size:
-            s[k] = 1
-            r = np.random.rand(prob_matrix.shape[0])
-            k2 = np.where(s > r)
-            np.append(probabilities, s[k2])
-            np.append(k, k2)
-
-        if np.shape(k)[1] > self.batch_size:
-            difference = np.shape(k)[1] - self.batch_size
-            if self.use_slices:
-                indices = np.arange(np.shape(k)[1])
-                np.random.shuffle(indices)
-                k = k[0][indices]
-                probabilities = probabilities[indices]
-                k = k[:-difference]
-                probabilities = probabilities[:-difference]
-
-            else:
-                new_k = np.asarray(k)
-                k = np.delete(k, (np.random.choice(new_k, difference, replace=False)))
-
-        ISWeights = np.float_power(((1 / len(self)) * (1 / probabilities)), self.working_beta)
-        k = k.tolist()
-
-        return k, ISWeights
-
-    def run_for_batch(self, alpha, beta):
-        self.alpha = alpha
-        self.beta = beta
-        while self.batch_queue.empty():
-            time.sleep(self.delay)
-        batch = self.batch_queue.get()
-        return batch

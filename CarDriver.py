@@ -46,8 +46,6 @@ class Agent:
             action = self.environment.sample_move()
         return action
 
-    # def observe(self, sample):
-    #     self.memory.add(sample)
 
     def observe_with_priority(self, sample):
         # max_p = np.max(self.memory.tree.tree[-self.memory.tree.capacity:])
@@ -99,9 +97,6 @@ class Agent:
         return new_state
 
     def run(self, should_replay=True, silent=True):
-        if should_replay:
-            print("running iteration: ", self.iteration)
-            print("cos cos cos")
         state = self.environment.reset()
         total_reward = 0
         counter = np.zeros(6)
@@ -189,86 +184,6 @@ def run_agent():
             best_out_of_ten = -10000
             if all_loaded or single_threading:
                 save_to_json()
-
-
-def encode_state(state):
-    map_size = 15
-    quest_number = 5
-
-    pos = state[0]
-    cargo = state[1]
-    gas = state[2]
-    new_state = np.zeros(map_size * 2 + quest_number + 1, )
-    new_state[pos[0]] = 1
-    new_state[map_size + pos[1]] = 1
-    if cargo != -1:
-        new_state[map_size * 2 + cargo] = 1
-    new_state[-1] = gas / environment.gas_max
-
-    return new_state
-
-
-def learn_and_sync():
-    if continue_learning:
-        json_file = open('model.json', 'r')
-        loaded_model_json = json_file.read()
-        json_file.close()
-        loaded_model = keras.models.model_from_json(loaded_model_json)
-        target = keras.models.model_from_json(loaded_model_json)
-        # load weights into new model
-        loaded_model.load_weights("model_weights.h5")
-        target.set_weights(loaded_model.get_weights())
-        print("Loaded model from disk")
-        all_loaded = True
-    else:
-        loaded_model = brain.create_model()
-        target = brain.create_model()
-        all_loaded = True
-    iterator = 0
-    loaded_model._make_predict_function()
-    target._make_predict_function()
-    while True:
-        iterator += 1
-        learn(loaded_model, target)
-        target.set_weights(loaded_model.get_weights())
-        synch_model.set_weights(loaded_model.get_weights())
-        print("Synch")
-
-
-def learn(model, target_net):
-    batch = memory.sample_batch(batch_size)
-
-    empty_state = np.zeros(state_count)
-
-    states = np.array([encode_state(obs[0]) for obs in batch])
-    states_ = np.array([(empty_state if obs[3] is None else encode_state(obs[3])) for obs in batch])
-
-    p = model.predict(states)
-    p_ = model.predict(states_)
-
-    X = []
-    Y = []
-
-    for i in range(len(batch)):
-        sample = batch[i]
-        state = sample[0]
-        action = int(sample[1])
-        reward = sample[2]
-        next_state = sample[3]
-        target = p[i]
-        if next_state is None:
-            target[action] = reward
-        else:
-            target[action] = reward + discount * np.amax(p_[i])
-
-        state = encode_state(state)
-        X.append(state)
-        Y.append(target)
-
-    for i in range(len(X)):
-        x = np.array([X[i]])
-        y = np.array([Y[i]])
-        model.fit(x, y, batch_size=256, verbose=0)
 
 
 
