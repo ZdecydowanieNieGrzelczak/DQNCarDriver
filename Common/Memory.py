@@ -1,9 +1,12 @@
 import random
 import time
+from queue import Queue
+
 import numpy as np
 import copy
 import threading
 from operator import itemgetter
+
 
 class Memory:
     """
@@ -185,16 +188,24 @@ class VectorizedMemory:
     beta = 0
     working_data = None
     working_priority = None
+    delay = 0.005
+    large_delay = 0.02
+    batch_queue = Queue(5)
+    _datalock = False
+    working_alpha = 0
+    working_beta = 0
 
     def __init__(self, size, use_slices=True, batch_size=2048, gamma=4):
         self.data = [None] * (size + 1)
         self.priority_buffer = np.zeros(shape=(size + 1))
         self.use_slices = use_slices
-        self.batch_golden_retriever = threading.Thread(target=self.sample_with_priority, daemon=True)
+        self.batch_golden_retriever = threading.Thread(target=self.batch_preparer, daemon=True)
         self.batch_size = batch_size
         self.gamma = gamma
 
     def append(self, element):
+        while(self._datalock):
+            time.sleep(self.delay)
         self.data[self.end] = element
         self.priority_buffer[self.end] = self.max_priority
         self.end = (self.end + 1) % len(self.data)
@@ -222,26 +233,43 @@ class VectorizedMemory:
         priority = np.clip(error / self.gamma, self.min_priority, self.max_priority)
         self.priority_buffer[index] = priority
 
+    def batch_preparer(self):
+        while True:
+            if self.batch_queue.full():
+                time.sleep(self.large_delay)
+            else:
+                self._datalock = True
+                if self.end > self.start:
+                    self.working_data = copy.deepcopy(self.data[:self.end])
+                    self.working_priority = copy.deepcopy(self.priority_buffer[:self.end])
+                else:
+                    self.working_data = copy.deepcopy(self.data)
+                    self.working_priority = copy.deepcopy(self.priority_buffer)
+                self._datalock = False
+                self.working_alpha = self.alpha
+                self.working_beta = self.beta
+                now = time.time()
+                self.sample_with_priority()
+                end = time.time()
+                print("Making a batch takes: ", end - now)
+
     def sample_with_priority(self):
         indexes, ISWeights = self.vectorized(self.working_priority)
         next_data = list(itemgetter(*indexes)(self.working_data))
-        self.next_batch = [indexes, next_data, ISWeights]
-        self.is_ready = True
+        next_batch = [indexes, next_data, ISWeights]
+        self.batch_queue.put(next_batch)
+
 
     def vectorized(self, prob_matrix):
 
-        s = np.float_power(prob_matrix / self.max_priority, self.alpha)
+        s = np.float_power(prob_matrix, self.working_alpha)
         r = np.random.rand(prob_matrix.shape[0])
         k = np.where(s > r)
         probabilities = s[k]
         while np.shape(k)[1] < self.batch_size:
-            # print("len of k ", np.shape(k))
-
             s[k] = 1
             r = np.random.rand(prob_matrix.shape[0])
-            # r = scipy.linalg.fractional_matrix_power((np.random.rand(prob_matrix.shape[0]) * np.amax(s), self.alpha))
-            k2 = np.where(s < r)
-            # print("shape of k2", np.shape(k2))
+            k2 = np.where(s > r)
             np.append(probabilities, s[k2])
             np.append(k, k2)
 
@@ -258,25 +286,16 @@ class VectorizedMemory:
             else:
                 new_k = np.asarray(k)
                 k = np.delete(k, (np.random.choice(new_k, difference, replace=False)))
-        ISWeights = np.float_power(((1 / len(self)) * (1 / probabilities)), self.beta)
+
+        ISWeights = np.float_power(((1 / len(self)) * (1 / probabilities)), self.working_beta)
         k = k.tolist()
 
         return k, ISWeights
 
     def run_for_batch(self, alpha, beta):
-        if self.end > self.start:
-            self.working_data = copy.deepcopy(self.data[:self.end])
-            self.working_priority = copy.deepcopy(self.priority_buffer[:self.end])
-        else:
-            self.working_data = copy.deepcopy(self.data)
-            self.working_priority = copy.deepcopy(self.priority_buffer)
         self.alpha = alpha
         self.beta = beta
-        self.is_ready = False
-        self.batch_golden_retriever.start()
-        return self.next_batch
-
-    # def numpy_sampling(self, probability_matrix, batch_size):
-    #     probability_matrix /= self.max_priority # normalize
-    #     k = np.random.choice(self.data, batch_size, replace=False, p=probability_matrix)
-    #     return k
+        while self.batch_queue.empty():
+            time.sleep(self.delay)
+        batch = self.batch_queue.get()
+        return batch

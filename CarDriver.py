@@ -122,8 +122,6 @@ class Agent:
                 break
         if should_replay:
             alpha, beta = self.getAB()
-            while not memory.is_ready:
-                time.sleep(0.005)
             batch = memory.run_for_batch(alpha, beta)
             errors = brain.train(batch)
             tree_idx = batch[0]
@@ -135,10 +133,13 @@ class Agent:
 
 
 def init_memory(agent, nr_of_iter):
+    while len(memory) < batch_size:
+        agent.run(False)
+    memory.batch_golden_retriever.start()
     for _ in range(nr_of_iter):
         agent.run(False)
 
-    memory.run_for_batch(1, 1)
+
 
 
 def save_to_json():
