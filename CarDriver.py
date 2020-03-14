@@ -46,8 +46,8 @@ class Agent:
             action = self.environment.sample_move()
         return action
 
-    def observe(self, sample):
-        self.memory.add(sample)
+    # def observe(self, sample):
+    #     self.memory.add(sample)
 
     def observe_with_priority(self, sample):
         # max_p = np.max(self.memory.tree.tree[-self.memory.tree.capacity:])
@@ -99,11 +99,15 @@ class Agent:
         return new_state
 
     def run(self, should_replay=True, silent=True):
+        if should_replay:
+            print("running iteration: ", self.iteration)
+            print("cos cos cos")
         state = self.environment.reset()
         total_reward = 0
         counter = np.zeros(6)
         # start = time.time()
         for _ in range(max_steps):
+            # print("taking step: ", _)
             action = self.act(state)
             if not silent:
                 counter[action] += 1
@@ -133,6 +137,8 @@ class Agent:
 def init_memory(agent, nr_of_iter):
     for _ in range(nr_of_iter):
         agent.run(False)
+
+    memory.run_for_batch(1, 1)
 
 
 def save_to_json():
@@ -270,6 +276,7 @@ test_run = False
 continue_learning = True
 single_threading = True
 
+
 #           H Y P E R            #
 state_count = 36
 batch_size = 2048
@@ -286,20 +293,19 @@ sess = tf.compat.v1.Session()
 
 #########################
 #           MEMORY
+fixed_batch_size = True
 alpha_min = 0.4
 alpha_max = 1
 beta_min = 0.001
 beta_max = 1
+gamma = 4
 
 environment = Game()
-# memory = Memory(10000000)
-# memory = TreeMemory(10000000)
-memory = VectorizedMemory(3000000)
+memory = VectorizedMemory(1000000, batch_size=batch_size, gamma=gamma)
 learning_rate = 0.002
-# brain = Brain(environment.state_count, environment.action_count, learning_rate=learning_rate)
 brain = ActorCritic(sess, environment.action_count, environment.state_count, tau=0.95)
 agent = Agent(brain, memory, environment)
-max_steps = 5000
+max_steps = 20000
 max_reward = -100000
 best_out_of_ten = -10000
 all_loaded = False
@@ -312,7 +318,8 @@ if continue_learning:
     brain.target_critic_model.load_weights("critic_model_weights.h5")
     print("loaded")
 
-init_memory(agent, 10)
+
+init_memory(agent, 20)
 
 
 
