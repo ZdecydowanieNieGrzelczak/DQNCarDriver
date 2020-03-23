@@ -94,7 +94,7 @@ class Agent:
         for i in range(len(cargo)):
             new_state[map_size * 2 + i] = cargo[i]
         new_state[-2] = gas / 500
-        new_state[-1] = np.min(money / 2000, 1)
+        new_state[-1] = np.clip(money / 2000, 0, 1)
 
         return new_state
 
