@@ -177,8 +177,8 @@ def run_agent():
             # agent.brain.update_target_network()
             print("Agent iteration:", agent.iteration)
             print("Current reward: ", reward)
-            print("Best reward: ", math.floor(max_reward))
-            print("Best of this episode: ", math.floor(best_out_of_ten))
+            print("Best reward: {0:.2f}".format(max_reward))
+            print("Best of this episode: {0:.2f}".format(best_out_of_ten))
             # print("Len of memory: ", len(memory))
             print("The questes: T:", stats[0], " P:", stats[1], " C:", stats[2], " out of: ", synchronise_every )
             print("_____________________")
@@ -191,7 +191,7 @@ def run_agent():
 
 ########################################################
 test_run = False
-continue_learning = False
+continue_learning = True
 single_threading = True
 
 
