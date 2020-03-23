@@ -217,11 +217,11 @@ beta_max = 0.9
 gamma = 4
 
 environment = Game()
-memory = VectorizedMemory(1000000, batch_size=batch_size, gamma=gamma)
+memory = VectorizedMemory(1000000, batch_size=batch_size, gamma=gamma, standarized_size=False)
 learning_rate = 0.002
 brain = ActorCritic(sess, environment.action_count, environment.state_count, tau=0.95)
 agent = Agent(brain, memory, environment)
-max_steps = 20000
+max_steps = 15000
 max_reward = -100000
 best_out_of_ten = -10000
 all_loaded = False

@@ -29,7 +29,7 @@ class VectorizedMemory:
     working_beta = 0
     waiting_elements = []
 
-    def __init__(self, size, use_slices=True, batch_size=2048, gamma=4, bq_size=1, waiting_queue=False):
+    def __init__(self, size, use_slices=True, batch_size=2048, gamma=4, bq_size=1, waiting_queue=False, standarized_size=True):
         self.data = [None] * (size + 1)
         self.priority_buffer = np.zeros(shape=(size + 1))
         self.use_slices = use_slices
@@ -38,6 +38,7 @@ class VectorizedMemory:
         self.gamma = gamma
         self.batch_queue = Queue(bq_size)
         self.waiting_queue = waiting_queue
+        self.standarized_size = standarized_size
 
     def append(self, element):
         while self._datalock:
@@ -101,26 +102,27 @@ class VectorizedMemory:
         r = np.random.rand(prob_matrix.shape[0])
         k = np.where(s > r)
         probabilities = s[k]
-        while np.shape(k)[1] < self.batch_size:
-            s[k] = 1
-            r = np.random.rand(prob_matrix.shape[0])
-            k2 = np.where(s > r)
-            np.append(probabilities, s[k2])
-            np.append(k, k2)
+        if self.standarized_size:
+            while np.shape(k)[1] < self.batch_size:
+                s[k] = 1
+                r = np.random.rand(prob_matrix.shape[0])
+                k2 = np.where(s > r)
+                np.append(probabilities, s[k2])
+                np.append(k, k2)
 
-        if np.shape(k)[1] > self.batch_size:
-            difference = np.shape(k)[1] - self.batch_size
-            if self.use_slices:
-                indices = np.arange(np.shape(k)[1])
-                np.random.shuffle(indices)
-                k = k[0][indices]
-                probabilities = probabilities[indices]
-                k = k[:-difference]
-                probabilities = probabilities[:-difference]
+            if np.shape(k)[1] > self.batch_size:
+                difference = np.shape(k)[1] - self.batch_size
+                if self.use_slices:
+                    indices = np.arange(np.shape(k)[1])
+                    np.random.shuffle(indices)
+                    k = k[0][indices]
+                    probabilities = probabilities[indices]
+                    k = k[:-difference]
+                    probabilities = probabilities[:-difference]
 
-            else:
-                new_k = np.asarray(k)
-                k = np.delete(k, (np.random.choice(new_k, difference, replace=False)))
+                else:
+                    new_k = np.asarray(k)
+                    k = np.delete(k, (np.random.choice(new_k, difference, replace=False)))
 
         ISWeights = np.float_power(((1 / len(self)) * (1 / probabilities)), self.working_beta)
         k = k.tolist()
