@@ -87,12 +87,14 @@ class Agent:
         pos = state[0]
         cargo = state[1]
         gas = state[2]
-        new_state = np.zeros(map_size * 2 + quest_number + 1, )
+        money = state[3]
+        new_state = np.zeros(map_size * 2 + quest_number + 2, )
         new_state[pos[0]] = 1
         new_state[map_size + pos[1]] = 1
         for i in range(len(cargo)):
             new_state[map_size * 2 + i] = cargo[i]
-        new_state[-1] = gas / 500
+        new_state[-2] = gas / 500
+        new_state[-1] = np.min(money / 2000, 1)
 
         return new_state
 
@@ -189,12 +191,12 @@ def run_agent():
 
 ########################################################
 test_run = False
-continue_learning = True
+continue_learning = False
 single_threading = True
 
 
 #           H Y P E R            #
-state_count = 36
+state_count = 37
 batch_size = 200
 epsilon_max = 0.99
 discount = 0.985

@@ -12,7 +12,8 @@ from operator import itemgetter
 
 class VectorizedMemory:
     min_priority = 0.0001
-    max_priority = 1
+    max_priority = 0.8
+    initialization_priority = 1
     start = 0
     end = 0
     random.seed(time.time())
@@ -44,7 +45,7 @@ class VectorizedMemory:
         while self._datalock:
             time.sleep(self.delay)
         self.data[self.end] = element
-        self.priority_buffer[self.end] = self.max_priority
+        self.priority_buffer[self.end] = self.initialization_priority
         self.end = (self.end + 1) % len(self.data)
 
         if self.end == self.start:
@@ -104,7 +105,7 @@ class VectorizedMemory:
         probabilities = s[k]
         if self.standarized_size:
             while np.shape(k)[1] < self.batch_size:
-                s[k] = 1
+                s[k] = 0
                 r = np.random.rand(prob_matrix.shape[0])
                 k2 = np.where(s > r)
                 np.append(probabilities, s[k2])
@@ -125,7 +126,8 @@ class VectorizedMemory:
                     k = np.delete(k, (np.random.choice(new_k, difference, replace=False)))
 
         ISWeights = np.float_power(((1 / len(self)) * (1 / probabilities)), self.working_beta)
-        k = k.tolist()
+        # print(np.shape(k[0]))
+        k = k[0].tolist()
 
         return k, ISWeights
 

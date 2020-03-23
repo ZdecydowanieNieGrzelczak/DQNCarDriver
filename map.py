@@ -36,7 +36,7 @@ class Game:
         self.ended = False
         self.action_space = (0, 1, 2, 3)
         self.action_count = len(self.action_space)
-        self.state_count = self.map_size * 2 + 1 + len(self.quests)
+        self.state_count = self.map_size * 2 + 1 + len(self.quests) + 1
         self.observation_space = []
         self.actions = [self.action_up, self.action_down, self.action_left, self.action_right]
         # self.actions = [self.action_up, self.action_down, self.action_left, self.action_right, self.action_special]
@@ -76,7 +76,7 @@ class Game:
         return self.get_state_object()
 
     def get_state_object(self):
-        state = (self.player_pos, self.cargo, self.gas)
+        state = (self.player_pos, self.cargo, self.gas, self.money)
         return state
 
     def step(self, action):

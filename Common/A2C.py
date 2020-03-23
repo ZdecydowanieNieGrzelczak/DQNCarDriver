@@ -17,12 +17,14 @@ def encode_state(state):
     pos = state[0]
     cargo = state[1]
     gas = state[2]
-    new_state = np.zeros(map_size * 2 + quest_number + 1, )
+    money = state[3]
+    new_state = np.zeros(map_size * 2 + quest_number + 2, )
     new_state[pos[0]] = 1
     new_state[map_size + pos[1]] = 1
     for i in range(len(cargo)):
         new_state[map_size * 2 + i] = cargo[i]
-    new_state[-1] = gas / 500
+    new_state[-2] = gas / 500
+    new_state[-1] = np.clip(money / 2000, 0, 1)
 
     return new_state
 
