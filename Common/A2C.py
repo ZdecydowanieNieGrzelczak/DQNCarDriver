@@ -28,7 +28,8 @@ def encode_state(state):
 
 
 class ActorCritic():
-    def __init__(self, sess, action_space, observation_space, learning_rate=0.001, discount=0.999, tau=0.95, hidden=[75, 40, 28]):
+    def __init__(self, sess, action_space, observation_space, learning_rate=0.001, discount=0.999, tau=0.95,
+                 hidden=(15, 40, 8)):
         tf.compat.v1.disable_eager_execution()
 
         self.sess = sess
@@ -51,7 +52,7 @@ class ActorCritic():
         grads = zip(self.actor_grads, actor_model_weights)
         self.optimize = tf.keras.optimizers.Adam(self.learning_rate).apply_gradients(grads)
 
-        self.critic_state_input, self.critic_action_input, self.critic_model = self.create_critic_model((64, 32), 32, 28)
+        self.critic_state_input, self.critic_action_input, self.critic_model = self.create_critic_model((25, 15), 15, 8)
 
         _, _, self.target_critic_model = self.create_critic_model((64, 32), 32, 28)
 
@@ -63,8 +64,8 @@ class ActorCritic():
 
         state_input = Input(shape=(self.observation_space,), name="actor_inp")
         h1 = Dense(hidden[0], activation="relu")(state_input)
-        h2 = Dense(hidden[1], activation="relu")(h1)
-        h3 = Dense(hidden[2], activation="relu")(h2)
+        # h2 = Dense(hidden[1], activation="relu")(h1)
+        h3 = Dense(hidden[2], activation="relu")(h1)
 
         output = Dense(self.action_space, activation="relu")(h3)
 

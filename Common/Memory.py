@@ -24,21 +24,23 @@ class VectorizedMemory:
     working_priority = None
     delay = 0.005
     large_delay = 0.02
-    batch_queue = Queue(5)
     _datalock = False
     working_alpha = 0
     working_beta = 0
+    waiting_elements = []
 
-    def __init__(self, size, use_slices=True, batch_size=2048, gamma=4):
+    def __init__(self, size, use_slices=True, batch_size=2048, gamma=4, bq_size=1, waiting_queue=False):
         self.data = [None] * (size + 1)
         self.priority_buffer = np.zeros(shape=(size + 1))
         self.use_slices = use_slices
         self.batch_golden_retriever = threading.Thread(target=self.batch_preparer, daemon=True)
         self.batch_size = batch_size
         self.gamma = gamma
+        self.batch_queue = Queue(bq_size)
+        self.waiting_queue = waiting_queue
 
     def append(self, element):
-        while(self._datalock):
+        while self._datalock:
             time.sleep(self.delay)
         self.data[self.end] = element
         self.priority_buffer[self.end] = self.max_priority
@@ -61,7 +63,10 @@ class VectorizedMemory:
             yield self[i]
 
     def add(self, element):
-        self.append(element)
+        if self.waiting_queue:
+            self.waiting_elements.append(element)
+        else:
+            self.append(element)
 
     def update_priority(self, index, error):
         priority = np.clip(error / self.gamma, self.min_priority, self.max_priority)
@@ -86,13 +91,12 @@ class VectorizedMemory:
 
     def sample_with_priority(self):
         indexes, ISWeights = self.vectorized(self.working_priority)
+        # noinspection PyArgumentList
         next_data = list(itemgetter(*indexes)(self.working_data))
         next_batch = [indexes, next_data, ISWeights]
         self.batch_queue.put(next_batch)
 
-
     def vectorized(self, prob_matrix):
-
         s = np.float_power(prob_matrix, self.working_alpha)
         r = np.random.rand(prob_matrix.shape[0])
         k = np.where(s > r)

@@ -195,10 +195,10 @@ single_threading = True
 
 #           H Y P E R            #
 state_count = 36
-batch_size = 2048
+batch_size = 200
 epsilon_max = 0.99
-discount = 0.99
-iteration_limit = 8000
+discount = 0.985
+iteration_limit = 1000
 start_from_iteration = 0
 synchronise_every = 5
 
@@ -211,9 +211,9 @@ sess = tf.compat.v1.Session()
 #           MEMORY
 fixed_batch_size = True
 alpha_min = 0.4
-alpha_max = 1
+alpha_max = 0.9
 beta_min = 0.001
-beta_max = 1
+beta_max = 0.9
 gamma = 4
 
 environment = Game()
@@ -235,7 +235,7 @@ if continue_learning:
     print("loaded")
 
 
-init_memory(agent, 20)
+
 
 
 
@@ -256,6 +256,7 @@ if not single_threading:
 
 
 if not test_run:
+    init_memory(agent, 20)
     run_agent()
 else:
     environment = Game()
