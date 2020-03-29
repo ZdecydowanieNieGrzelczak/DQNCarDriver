@@ -1,5 +1,7 @@
 import random, time
 import numpy as np
+from math import trunc
+
 
 class Game:
 
@@ -83,9 +85,11 @@ class Game:
         if action > len(self.action_space) - 1:
             raise Exception('InvalidAction', action)
         else:
-            reward = self.action_special()
+            reward = self.actions[action]()
+            # reward = self.action_special()
             if self.gas <= 0:
-                reward -= 1000
+                # print("no gas")
+                reward -= self.reward_normalizer
                 self.is_done = True
 
         reward /= self.reward_normalizer
@@ -97,8 +101,9 @@ class Game:
             return self.action_wait()
         else:
             self.player_pos[0] -= 1
+
             self.gas -= 1
-            return 0
+            return self.action_special() - 1
 
     def action_down(self):
         if self.player_pos[0] == 14:
@@ -106,7 +111,7 @@ class Game:
         else:
             self.gas -= 1
             self.player_pos[0] += 1
-            return 0
+            return self.action_special() - 1
 
     def action_right(self):
         if self.player_pos[1] == 14:
@@ -114,7 +119,7 @@ class Game:
         else:
             self.gas -= 1
             self.player_pos[1] += 1
-            return 0
+            return self.action_special() - 1
 
     def action_left(self):
         if self.player_pos[1] == 0:
@@ -122,11 +127,11 @@ class Game:
         else:
             self.gas -= 1
             self.player_pos[1] -= 0
-            return 0
+            return self.action_special() - 1
 
     def action_wait(self):
         self.gas -= 1 * self.wait_discount
-        return 0
+        return -1 * self.wait_discount
 
     def action_special(self):
         if self.player_pos in self.quests:
@@ -134,16 +139,16 @@ class Game:
             if self.cargo[quest] == 0:
                 self.started = True
                 self.cargo[quest] = 1
-                self.money += self.prepaid * self.rewards[quest] * 3
-                return self.prepaid * self.rewards[quest] * 3
+                self.money += self.prepaid * self.rewards[quest]
+                return self.prepaid * self.rewards[quest]
 
         elif self.player_pos in self.destinations:
             quest = self.destinations.index(self.player_pos)
             if self.cargo[quest] == 1:
                 self.ended = True
                 self.cargo[quest] = 0
-                self.money += (1 - self.prepaid) * self.rewards[quest] * 3
-                return (1 - self.prepaid) * self.rewards[quest] * 3
+                self.money += (1 - self.prepaid) * self.rewards[quest]
+                return (1 - self.prepaid) * self.rewards[quest]
 
         if self.player_pos in self.gas_stations:
             cost = self.gas - self.gas_max
@@ -155,27 +160,28 @@ class Game:
             else:
                 self.money += cost
                 self.gas = self.gas_max
-            return cost
-        return self.action_wait()
+            # print("Tanking. Cost: ", cost)
+            return 0
+        return 0
+        # return self.action_wait()
 
     def sample_move(self):
         return random.randint(0, len(self.action_space) - 1)
 
-    def print_map(self):
+    def print_map(self, map=None):
         print("")
+        print("Actions: 0: up, 1: down, 2: left, 3: right")
         print("")
-        print("")
+
 
         for i in range(self.map_size):
             line = "     "
             for j in range(self.map_size):
-                line += self.map[i][j] + " "
+                if map is None:
+                    line += self.map[i][j] + " "
+                else:
+                    line += "X" + str(trunc(map[i][j])) + " "
             print(line)
-
-        print("")
-        print("")
-        print("")
-
 
     def set_random_points(self):
         points = []
@@ -215,3 +221,4 @@ class Game:
         self.rewards = rewards
         self.gas_stations = gas_stations
         self.cargo = [0 for i in range(self.quest_nr)]
+

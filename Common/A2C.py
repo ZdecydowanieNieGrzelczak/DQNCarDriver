@@ -56,7 +56,7 @@ class ActorCritic():
 
         self.critic_state_input, self.critic_action_input, self.critic_model = self.create_critic_model((25, 15), 15, 8)
 
-        _, _, self.target_critic_model = self.create_critic_model((64, 32), 32, 28)
+        _, _, self.target_critic_model = self.create_critic_model((25, 15), 15, 8)
 
         self.critic_grads = tf.gradients(self.critic_model.output, self.critic_action_input)
 
@@ -69,7 +69,7 @@ class ActorCritic():
         # h2 = Dense(hidden[1], activation="relu")(h1)
         h3 = Dense(hidden[2], activation="relu")(h1)
 
-        output = Dense(self.action_space, activation="relu")(h3)
+        output = Dense(self.action_space, activation="linear")(h3)
 
         model = Model(input=state_input, output=output)
         adam = Adam(learning_rate=self.learning_rate)
@@ -86,7 +86,7 @@ class ActorCritic():
 
         merged = Add()([state_h2, action_h1])
         merged_h1 = Dense(hidden_merged, name="merged", activation='relu')(merged)
-        output = Dense(units=1, name="output_crit", activation='relu')(merged_h1)
+        output = Dense(units=1, name="output_crit", activation='linear')(merged_h1)
         model = Model(input=[state_input, action_input],
                       output=output)
 
@@ -104,11 +104,15 @@ class ActorCritic():
     def _train_critic(self, batch):
         rewards, states, actions = [], [], []
         batch_idx, samples, ISWeights = batch
+        # print("Critic IS Weights avr: ", np.mean(ISWeights))
+        # print("Critic IS Weights min: ", np.amax(ISWeights))
+        # print("Critic IS Weights max: ", np.amin(ISWeights))
+        # return
         for i in range(len(samples)):
             sample = samples[i]
 
             cur_state, action, reward, new_state, done = sample
-            action_arr = np.zeros(shape=(self.action_space))
+            action_arr = np.zeros(shape=self.action_space)
             action_arr[action] = 1
             if not done:
                 target_action = self.target_actor_model.predict(np.array(([encode_state(new_state)])))
@@ -147,8 +151,10 @@ class ActorCritic():
         actor_target_weights = self.target_actor_model.get_weights()
 
         for i in range(len(actor_target_weights)):
-            actor_target_weights[i] *= self.tau
-            actor_target_weights[i] = actor_model_weights[i] * (1 - self.tau)
+            # print(actor_target_weights[i])
+            # actor_target_weights[i] *= self.tau
+            # actor_target_weights[i] += actor_model_weights[i] * (1 - self.tau)
+            actor_target_weights[i] = self.tau * actor_target_weights[i] + actor_model_weights[i] * (1 - self.tau)
         self.target_actor_model.set_weights(actor_target_weights)
 
     def _update_critic_target(self):
@@ -156,6 +162,6 @@ class ActorCritic():
         critic_target_weights = self.target_critic_model.get_weights()
 
         for i in range(len(critic_target_weights)):
-            critic_target_weights[i] *= self.tau
-            critic_target_weights[i] = critic_model_weights[i] * (1 - self.tau)
+            critic_target_weights[i] = self.tau * critic_target_weights[i] + critic_model_weights[i] * (1 - self.tau)
+            # critic_target_weights[i] += critic_model_weights[i] * (1 - self.tau)
         self.target_critic_model.set_weights(critic_target_weights)

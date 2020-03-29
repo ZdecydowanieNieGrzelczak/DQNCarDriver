@@ -10,6 +10,7 @@ import threading
 from Common.A2C import ActorCritic
 import keras.backend as K
 import tensorflow as tf
+from BrainAnalizer import BrainAnalizer
 
 
 class Agent:
@@ -111,6 +112,7 @@ class Agent:
             next_state, reward, is_done, info = self.environment.step(action)
             total_reward += reward
             if is_done:
+                # print("iteration ", agent.iteration, " is done")
                 next_state = None
             self.observe_with_priority((state, action, reward, next_state, is_done))
 
@@ -177,8 +179,8 @@ def run_agent():
             # agent.brain.update_target_network()
             print("Agent iteration:", agent.iteration)
             print("Current reward: ", reward)
-            print("Best reward: {0:.2f}".format(max_reward))
-            print("Best of this episode: {0:.2f}".format(best_out_of_ten))
+            print("Best reward: {0:.4f}".format(max_reward))
+            print("Best of this episode: {0:.4f}".format(best_out_of_ten))
             # print("Len of memory: ", len(memory))
             print("The questes: T:", stats[0], " P:", stats[1], " C:", stats[2], " out of: ", synchronise_every )
             print("_____________________")
@@ -191,16 +193,18 @@ def run_agent():
 
 ########################################################
 test_run = False
+check_policy = False
+check_values = False
 continue_learning = True
 single_threading = True
 
 
 #           H Y P E R            #
 state_count = 37
-batch_size = 200
-epsilon_max = 0.99
-discount = 0.985
-iteration_limit = 1000
+batch_size = 1500
+epsilon_max = 0.999
+discount = 0.99
+iteration_limit = 10000
 start_from_iteration = 0
 synchronise_every = 5
 
@@ -213,13 +217,13 @@ sess = tf.compat.v1.Session()
 #           MEMORY
 fixed_batch_size = True
 alpha_min = 0.4
-alpha_max = 0.9
+alpha_max = 0.85
 beta_min = 0.001
-beta_max = 0.9
+beta_max = 0.85
 gamma = 4
 
 environment = Game()
-memory = VectorizedMemory(1000000, batch_size=batch_size, gamma=gamma, standarized_size=False)
+memory = VectorizedMemory(1000000, batch_size=batch_size, gamma=gamma, standarized_size=True)
 learning_rate = 0.002
 brain = ActorCritic(sess, environment.action_count, environment.state_count, tau=0.95)
 agent = Agent(brain, memory, environment)
@@ -261,12 +265,36 @@ if not test_run:
     init_memory(agent, 20)
     run_agent()
 else:
-    environment = Game()
-    # brain = Brain(environment.state_count, environment.action_count, learning_rate=learning_rate)
     brain.actor_model.load_weights("actor_model_weights.h5")
     brain.target_actor_model.load_weights("actor_model_weights.h5")
     brain.critic_model.load_weights("critic_model_weights.h5")
     brain.target_critic_model.load_weights("critic_model_weights.h5")
-    while True:
-        reward = agent.run(False, False)
-        print(reward)
+    brain_tester = BrainAnalizer(brain, environment.map_size)
+    if check_policy:
+        tanked_moves = brain_tester.check_policy(tanked=1, money=1)
+        empty_moves = brain_tester.check_policy(tanked=0, money=1)
+        print("Actions for tanked car: ")
+        environment.print_map(tanked_moves)
+        print("Actions for car without fuel: ")
+        environment.print_map(empty_moves)
+        print("map:")
+        environment.print_map()
+    if check_values:
+        tanked_values = brain_tester.check_value(tanked=1, money=1)
+        empty_values = brain_tester.check_value(tanked=0, money=1)
+        print("quest values:")
+        print(tanked_values[12][6])
+        print(tanked_values[0][2])
+        print(tanked_values[11][11])
+        print(tanked_values[5][4])
+        print(tanked_values[4][13])
+        print("station values:")
+        print(empty_values[7][7])
+        print(empty_values[0][5])
+        print(empty_values[10][6])
+        print("all values:")
+        for i in range(environment.map_size):
+            line = ""
+            for j in range(environment.map_size):
+                line += "{:10}  ".format(str(tanked_values[i][j]))
+            print(line)

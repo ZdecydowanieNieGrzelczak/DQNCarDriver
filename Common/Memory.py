@@ -12,7 +12,7 @@ from operator import itemgetter
 
 class VectorizedMemory:
     min_priority = 0.0001
-    max_priority = 0.8
+    max_priority = 1
     initialization_priority = 1
     start = 0
     end = 0
@@ -30,7 +30,7 @@ class VectorizedMemory:
     working_beta = 0
     waiting_elements = []
 
-    def __init__(self, size, use_slices=True, batch_size=2048, gamma=4, bq_size=1, waiting_queue=False, standarized_size=True):
+    def __init__(self, size, use_slices=True, batch_size=2048, gamma=16, bq_size=1, waiting_queue=False, standarized_size=True):
         self.data = [None] * (size + 1)
         self.priority_buffer = np.zeros(shape=(size + 1))
         self.use_slices = use_slices
@@ -126,8 +126,9 @@ class VectorizedMemory:
                     k = np.delete(k, (np.random.choice(new_k, difference, replace=False)))
 
         ISWeights = np.float_power(((1 / len(self)) * (1 / probabilities)), self.working_beta)
-        # print(np.shape(k[0]))
-        k = k[0].tolist()
+        if np.shape(k)[0] == 1:
+            k = k[0]
+        k = k.tolist()
 
         return k, ISWeights
 
