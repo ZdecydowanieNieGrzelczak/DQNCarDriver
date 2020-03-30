@@ -109,8 +109,6 @@ class Agent:
         for _ in range(max_steps):
             # print("taking step: ", _)
             action = self.act(state)
-            if not silent:
-                counter[action] += 1
             next_state, reward, is_done, info = self.environment.step(action)
             total_reward += reward
             if is_done:
@@ -128,8 +126,6 @@ class Agent:
             tree_idx = batch[0]
             for i in range(len(errors)):
                 memory.update_priority(tree_idx[i], errors[i])
-        if not silent:
-            print("Counter : ", counter)
         return total_reward
 
 
@@ -162,34 +158,18 @@ def run_agent():
     stats = [0, 0, 0]
     while True:
         reward = agent.run(should_replay=single_threading)
-        if agent.environment.has_tanked:
-            stats[0] += 1
-        if agent.environment.started:
-            stats[1] += 1
-        if agent.environment.ended:
-            stats[2] += 1
         if reward > max_reward:
             max_reward = reward
-        if reward > best_out_of_ten:
-            best_out_of_ten = reward
         agent.iteration += 1
-
+        print("Agent iteration:", agent.iteration)
+        print("Current reward: ", reward)
+        print("Best reward: {0:.4f}".format(max_reward))
+        print(agent.environment.scribe)
+        print("Current loss is equal to: ", np.average(agent.brain.current_loss))
+        print("Average actor grad is equal to: ", agent.brain.current_grad)
+        print("_____________________")
         if agent.iteration % synchronise_every == 0:
-            # agent.brain.update_model()
-            # if not single_threading:
-            #     agent.brain.model.set_weights(synch_model.get_weights())
-            # agent.brain.update_target_network()
-            print("Agent iteration:", agent.iteration)
-            print("Current reward: ", reward)
-            print("Best reward: {0:.4f}".format(max_reward))
-            print("Best of this episode: {0:.4f}".format(best_out_of_ten))
-            # print("Len of memory: ", len(memory))
-            print("The questes: T:", stats[0], " P:", stats[1], " C:", stats[2], " out of: ", synchronise_every )
-            print("_____________________")
-            stats = [0, 0, 0]
-            best_out_of_ten = -10000
-            if all_loaded or single_threading:
-                save_to_json()
+            save_to_json()
 
 
 
@@ -203,13 +183,13 @@ single_threading = True
 
 #           H Y P E R            #
 state_count = 37
-batch_size = 400
+batch_size = 2500
 epsilon_max = 0.999
 discount = 0.995
 iteration_limit = 10000
 learning_limit = 15000
 start_from_iteration = 0
-synchronise_every = 5
+synchronise_every = 10
 learning_rate = 0.0002
 
 

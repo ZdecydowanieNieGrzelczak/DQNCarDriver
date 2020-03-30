@@ -3,6 +3,23 @@ import numpy as np
 from math import trunc
 
 
+class Scribe:
+
+    def __init__(self, nr_of_quests, nr_of_stations, nr_of_locations):
+        self.picked = np.zeros(shape=nr_of_quests)
+        self.ended = np.zeros(shape=nr_of_quests)
+        self.tanked = np.zeros(shape=nr_of_stations)
+        self.mobility = np.zeros(shape=nr_of_locations)
+
+    def __str__(self):
+        representation = "During run:\n"
+        picked = "Picked: {0:.0f} Q1: {p[0]:.0f} Q2: {p[1]:.0f} Q3: {p[2]:.0f} Q4: {p[3]:.0f} Q5: {p[4]:.0f}\n".format(np.sum(self.picked), p=self.picked)
+        ended = "Ended:  {0:.0f} Q1: {p[0]:.0f} Q2: {p[1]:.0f} Q3: {p[2]:.0f} Q4: {p[3]:.0f} Q5: {p[4]:.0f}\n".format(np.sum(self.ended), p=self.ended)
+        tanked = "Tanked: {0:.0f} LP1: {p[0]:.0f} LP2: {p[1]:.0f} LP3: {p[2]:.0f}\n".format(np.sum(self.tanked), p=self.tanked)
+        return ''.join([representation, picked, ended, tanked])
+
+
+
 class Game:
 
     wait_discount = 1
@@ -41,6 +58,8 @@ class Game:
         self.state_count = self.map_size * 2 + 1 + len(self.quests) + 1
         self.observation_space = []
         self.actions = [self.action_up, self.action_down, self.action_left, self.action_right]
+        self.scribe = Scribe(self.quest_nr, self.station_nr, self.map_size ** 2)
+
         # self.actions = [self.action_up, self.action_down, self.action_left, self.action_right, self.action_special]
         # self.actions = [self.action_up, self.action_down, self.action_left, self.action_right, self.action_wait, self.action_special]
 
@@ -73,7 +92,7 @@ class Game:
         self.has_tanked = False
         self.started = False
         self.ended = False
-
+        self.scribe = Scribe(self.quest_nr, self.station_nr, self.map_size ** 2)
         return self.get_state_object()
 
     def get_state_object(self):
@@ -136,6 +155,7 @@ class Game:
         if self.player_pos in self.quests:
             quest = self.quests.index(self.player_pos)
             if self.cargo[quest] == 0:
+                self.scribe.picked[quest] += 1
                 self.started = True
                 self.cargo[quest] = 1
                 self.money += self.prepaid * self.rewards[quest]
@@ -144,6 +164,7 @@ class Game:
         elif self.player_pos in self.destinations:
             quest = self.destinations.index(self.player_pos)
             if self.cargo[quest] == 1:
+                self.scribe.ended[quest] += 1
                 self.ended = True
                 self.cargo[quest] = 0
                 self.money += (1 - self.prepaid) * self.rewards[quest]
@@ -152,6 +173,7 @@ class Game:
         if self.player_pos in self.gas_stations:
             cost = self.gas - self.gas_max
             self.has_tanked = True
+            self.scribe.tanked[self.gas_stations.index(self.player_pos)] += 1
             if abs(cost) > self.money:
                 cost = self.money * -1
                 self.money = 0
@@ -220,4 +242,11 @@ class Game:
         self.rewards = rewards
         self.gas_stations = gas_stations
         self.cargo = [0 for i in range(self.quest_nr)]
+
+
+
+
+
+
+
 

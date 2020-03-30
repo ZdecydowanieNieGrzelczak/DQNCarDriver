@@ -30,6 +30,9 @@ def encode_state(state):
 
 
 class ActorCritic():
+    current_loss = 0
+    current_grad = 0
+
     def __init__(self, sess, action_space, observation_space, learning_rate=0.001, discount=0.999, tau=0.95,
                  hidden=(15, 40, 8)):
         tf.compat.v1.disable_eager_execution()
@@ -124,8 +127,8 @@ class ActorCritic():
             rewards.append(reward)
             states.append(encode_state(cur_state))
             # print("TD: ", reward)
-        history = self.critic_model.fit([states, actions], rewards, epochs=10, verbose=0, batch_size=len(samples), sample_weight=ISWeights)
-        print(history.history['loss'])
+        history = self.critic_model.fit([states, actions], rewards, epochs=2, verbose=0, batch_size=len(samples), sample_weight=ISWeights)
+        self.current_loss = history.history['loss']
 
     def _train_actor(self, batch):
         tree_index, samples, ISWeights = batch
@@ -148,6 +151,7 @@ class ActorCritic():
                 self.actor_state_input: [encode_state(cur_state)],
                 self.actor_critic_grad: weighted_grads
             })
+        self.current_grad = np.average(grads_list)
         return grads_list
 
     def _encode_action(self, actions):
