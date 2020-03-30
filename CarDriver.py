@@ -197,7 +197,7 @@ def run_agent():
 test_run = False
 check_policy = False
 check_values = False
-continue_learning = False
+continue_learning = True
 single_threading = True
 
 

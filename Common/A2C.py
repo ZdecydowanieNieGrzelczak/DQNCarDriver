@@ -114,14 +114,18 @@ class ActorCritic():
             cur_state, action, reward, new_state, done = sample
             action_arr = np.zeros(shape=self.action_space)
             action_arr[action] = 1
+            # print("Reward: ", reward)
             if not done:
-                target_action = self.target_actor_model.predict(np.array(([encode_state(new_state)])))
-                future_reward = self.target_critic_model.predict([np.array(([encode_state(new_state)])), target_action])[0][0]
-                reward += self.discount * future_reward
+                target_action = self._encode_action(self.target_actor_model.predict(np.array(([encode_state(new_state)]))))
+                future_state = self.target_critic_model.predict([np.array(([encode_state(new_state)])), target_action])[0][0]
+                current_state = self.target_critic_model.predict([np.array(([encode_state(cur_state)])), target_action])[0][0]
+                reward += self.discount * future_state - current_state
             actions.append(action_arr)
             rewards.append(reward)
             states.append(encode_state(cur_state))
-        self.critic_model.fit([states, actions], rewards, epochs=10, verbose=0, batch_size=len(samples), sample_weight=ISWeights)
+            # print("TD: ", reward)
+        history = self.critic_model.fit([states, actions], rewards, epochs=10, verbose=0, batch_size=len(samples), sample_weight=ISWeights)
+        print(history.history['loss'])
 
     def _train_actor(self, batch):
         tree_index, samples, ISWeights = batch
@@ -130,19 +134,23 @@ class ActorCritic():
             sample = samples[i]
             ISWeight = ISWeights[i]
             cur_state, action, reward, new_state, _ = sample
-            predicted_action = self._softmax(self.actor_model.predict(np.array(([encode_state(cur_state)]))))
+            predicted_action = self._encode_action(self.actor_model.predict(np.array(([encode_state(cur_state)]))))
             grads = self.sess.run(self.critic_grads, feed_dict={
                 self.critic_state_input: [encode_state(cur_state)], self.critic_action_input: predicted_action
             })[0]
             weighted_grads = ISWeight * grads
             grads_list.append(np.sum(np.abs(grads)))
+            # print("Grads: ", grads)
+            if grads_list[-1] != 0:
+                pass
+                # print("Grad: ", grads_list[-1])
             self.sess.run(self.optimize, feed_dict={
                 self.actor_state_input: [encode_state(cur_state)],
                 self.actor_critic_grad: weighted_grads
             })
         return grads_list
 
-    def _softmax(self, actions):
+    def _encode_action(self, actions):
         new_actions = np.zeros(shape=np.shape(actions))
         new_actions[0][np.argmax(actions)] = 1
         return new_actions
