@@ -69,7 +69,7 @@ class ActorCritic():
         # h2 = Dense(hidden[1], activation="relu")(h1)
         h3 = Dense(hidden[2], activation="relu")(h1)
 
-        output = Dense(self.action_space, activation="linear")(h3)
+        output = Dense(self.action_space, activation="relu")(h3)
 
         model = Model(input=state_input, output=output)
         adam = Adam(learning_rate=self.learning_rate)
@@ -90,7 +90,7 @@ class ActorCritic():
         model = Model(input=[state_input, action_input],
                       output=output)
 
-        adam = Adam(lr=0.001)
+        adam = Adam(learning_rate=self.learning_rate)
         model.compile(loss="mse", optimizer=adam)
         return state_input, action_input, model
 
@@ -130,7 +130,7 @@ class ActorCritic():
             sample = samples[i]
             ISWeight = ISWeights[i]
             cur_state, action, reward, new_state, _ = sample
-            predicted_action = self.actor_model.predict(np.array(([encode_state(cur_state)])))
+            predicted_action = self._softmax(self.actor_model.predict(np.array(([encode_state(cur_state)]))))
             grads = self.sess.run(self.critic_grads, feed_dict={
                 self.critic_state_input: [encode_state(cur_state)], self.critic_action_input: predicted_action
             })[0]
@@ -141,6 +141,11 @@ class ActorCritic():
                 self.actor_critic_grad: weighted_grads
             })
         return grads_list
+
+    def _softmax(self, actions):
+        new_actions = np.zeros(shape=np.shape(actions))
+        new_actions[0][np.argmax(actions)] = 1
+        return new_actions
 
     def update_targets(self):
         self._update_actor_target()

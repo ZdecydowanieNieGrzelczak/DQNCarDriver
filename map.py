@@ -6,7 +6,7 @@ from math import trunc
 class Game:
 
     wait_discount = 1
-    gas_max = 500
+    gas_max = 300
     map_size = 15
     prepaid = 0.1
     gas_price = 1
@@ -19,8 +19,8 @@ class Game:
         self.station_nr = station_nr
         self.reward_normalizer = reward_normalizer
         random.seed(time.time())
-        self.gas = 250
-        self.money = 1000
+        self.gas = 150
+        self.money = 400
         self.map = []
         self.player_pos = [random.randint(0, self.map_size - 1), random.randint(0, self.map_size - 1)]
         self.is_done = False
@@ -65,9 +65,8 @@ class Game:
 
     def reset(self):
         self.player_pos = [random.randint(0, self.map_size - 1), random.randint(0, self.map_size - 1)]
-        self.gas = 250
-        self.money = 1000
-        self.gas_max = 500
+        self.gas = 150
+        self.money = 400
         self.cargo = [0, 0, 0, 0, 0]
         self.is_done = False
         self.reward = 0
@@ -89,10 +88,10 @@ class Game:
             # reward = self.action_special()
             if self.gas <= 0:
                 # print("no gas")
-                reward -= self.reward_normalizer
+                reward -= 100
                 self.is_done = True
 
-        reward /= self.reward_normalizer
+        # reward /= self.reward_normalizer
         state = (self.get_state_object(), reward, self.is_done, [])
         return state
 

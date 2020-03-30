@@ -11,6 +11,7 @@ from Common.A2C import ActorCritic
 import keras.backend as K
 import tensorflow as tf
 from BrainAnalizer import BrainAnalizer
+import gym
 
 
 class Agent:
@@ -33,8 +34,8 @@ class Agent:
             return 0.001
 
     def getAB(self):
-        if self.iteration < self.iteration_limit:
-            current_progress = (self.iteration / self.iteration_limit)
+        if self.iteration < learning_limit:
+            current_progress = (self.iteration / learning_limit)
             return alpha_min + (alpha_max - alpha_min) * current_progress, beta_min + (beta_max - beta_min) * current_progress
         else:
             return alpha_max, beta_max
@@ -45,6 +46,7 @@ class Agent:
             action = np.argmax(self.brain.actor_model.predict([[state]]))
         else:
             action = self.environment.sample_move()
+            # action = self.environment.action_space.sample()
         return action
 
 
@@ -195,18 +197,21 @@ def run_agent():
 test_run = False
 check_policy = False
 check_values = False
-continue_learning = True
+continue_learning = False
 single_threading = True
 
 
 #           H Y P E R            #
 state_count = 37
-batch_size = 1500
+batch_size = 400
 epsilon_max = 0.999
-discount = 0.99
+discount = 0.995
 iteration_limit = 10000
+learning_limit = 15000
 start_from_iteration = 0
 synchronise_every = 5
+learning_rate = 0.0002
+
 
 # sess = tf.Graph()
 sess = tf.compat.v1.Session()
@@ -223,9 +228,10 @@ beta_max = 0.85
 gamma = 4
 
 environment = Game()
+# environment = gym.make("CartPole-v1")
 memory = VectorizedMemory(1000000, batch_size=batch_size, gamma=gamma, standarized_size=True)
-learning_rate = 0.002
-brain = ActorCritic(sess, environment.action_count, environment.state_count, tau=0.95)
+# brain = ActorCritic(sess, environment.action_count, environment.state_count, tau=0.95)
+brain = ActorCritic(sess, len(environment.action_space), state_count, tau=0.95, learning_rate=learning_rate)
 agent = Agent(brain, memory, environment)
 max_steps = 15000
 max_reward = -100000
@@ -265,7 +271,19 @@ if not test_run:
     init_memory(agent, 20)
     run_agent()
 else:
-    brain.actor_model.load_weights("actor_model_weights.h5")
+    while True:
+        is_done = False
+        state = environment.reset()
+        total_reward = 0
+
+        while not is_done:
+            environment.render()
+
+            action = np.argmax(brain.actor_model.predict([[state]]))
+            next_state, reward, is_done, info = environment.step(action)
+            total_reward += reward
+            state = next_state
+        brain.actor_model.load_weights("actor_model_weights.h5")
     brain.target_actor_model.load_weights("actor_model_weights.h5")
     brain.critic_model.load_weights("critic_model_weights.h5")
     brain.target_critic_model.load_weights("critic_model_weights.h5")
