@@ -64,6 +64,14 @@ class VectorizedMemory:
         for i in range(len(self)):
             yield self[i]
 
+    def average(self):
+        try:
+            sum = np.sum(self.data)
+        except:
+            return 0
+        return sum / len(self)
+
+
     def add(self, element):
         if self.waiting_queue:
             self.waiting_elements.append(element)

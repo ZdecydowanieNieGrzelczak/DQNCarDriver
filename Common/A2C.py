@@ -33,17 +33,19 @@ class ActorCritic():
     current_loss = 0
     current_grad = 0
 
-    def __init__(self, sess, action_space, observation_space, learning_rate=0.001, discount=0.999, tau=0.95,
-                 hidden=(15, 40, 8)):
+    def __init__(self, sess, action_space, observation_space, actor_learning_rate=0.0001, critic_learning_rate=0.001,
+                 discount=0.999, tau=0.95, hidden=(25, 40, 15)):
         tf.compat.v1.disable_eager_execution()
 
         self.sess = sess
         self.hidden = hidden
-        self.learning_rate = learning_rate
+        self.actor_learning_rate = actor_learning_rate
+        self.critic_learning_rate = critic_learning_rate
         self.discount = discount
         self.tau = tau
         self.observation_space = observation_space
         self.action_space = action_space
+        self.empty_action = np.zeros(shape=action_space)
 
         self.actor_state_input, self.actor_model = self.create_actor_model(self.hidden)
         _, self.target_actor_model = self.create_actor_model(self.hidden)
@@ -55,13 +57,27 @@ class ActorCritic():
         actor_model_weights = self.actor_model.trainable_weights
         self.actor_grads = tf.gradients(self.actor_model.output, actor_model_weights, -self.actor_critic_grad)
         grads = zip(self.actor_grads, actor_model_weights)
-        self.optimize = tf.keras.optimizers.Adam(self.learning_rate).apply_gradients(grads)
+        self.optimize = tf.keras.optimizers.Adam(self.actor_learning_rate).apply_gradients(grads)
 
-        self.critic_state_input, self.critic_action_input, self.critic_model = self.create_critic_model((25, 15), 15, 8)
+        self.loss_placeholder = K.placeholder(1, dtype=tf.float64)
 
-        _, _, self.target_critic_model = self.create_critic_model((25, 15), 15, 8)
+        self.action_placeholder = K.placeholder([None, self.action_space], dtype=tf.float64)
 
-        self.critic_grads = tf.gradients(self.critic_model.output, self.critic_action_input)
+        loss_actor = -tf.math.log(self.action_placeholder) * self.loss_placeholder
+
+        # self.actor_optimize = tf.keras.optimizers.Adam(self.actor_learning_rate)\
+        #     .minimize(loss_actor,
+        #               var_list=actor_model_weights)
+
+        self.actor_optimize = tf.keras.optimizers.Adam(self.actor_learning_rate).apply_gradients(grads)
+
+        self.critic_input, self.critic_model = self.create_advantage_critic_model((25, 15))
+
+        _, self.target_critic_model = self.create_advantage_critic_model((25, 15))
+
+        # self.critic_grads = tf.gradients(self.critic_model.output, self.critic_input)
+        self.critic_advantage_grads = tf.gradients(self.critic_model.output, self.critic_input)
+        # self.critic_grads = tf.gradients(self.critic_model.output, [self.critic_state_input, self.critic_action_input]) moze???
 
         self.sess.run(tf.compat.v1.global_variables_initializer())
 
@@ -75,7 +91,7 @@ class ActorCritic():
         output = Dense(self.action_space, activation="relu")(h3)
 
         model = Model(input=state_input, output=output)
-        adam = Adam(learning_rate=self.learning_rate)
+        adam = Adam(learning_rate=self.actor_learning_rate)
         model.compile(loss="mse", optimizer=adam)
         return state_input, model
 
@@ -93,42 +109,62 @@ class ActorCritic():
         model = Model(input=[state_input, action_input],
                       output=output)
 
-        adam = Adam(learning_rate=self.learning_rate)
+        adam = Adam(learning_rate=self.critic_learning_rate)
         model.compile(loss="mse", optimizer=adam)
         return state_input, action_input, model
 
-    def train(self, batch):
-        rewards = []
-        self._train_critic(batch)
-        grads = self._train_actor(batch)
-        self.update_targets()
-        return grads
+    def create_advantage_critic_model(self, hidden_size):
+        critic_input = Input(shape=(self.observation_space,), name="critic_input")
+        critic_h1 = Dense(units=hidden_size[0], activation="relu")(critic_input)
+        critic_h2 = Dense(units=hidden_size[1], activation="relu")(critic_h1)
+        output = Dense(units=1, name="crit_output", activation="linear")(critic_h2)
+        model = Model(input=critic_input, output=output)
 
-    def _train_critic(self, batch):
+        adam = Adam(learning_rate=self.critic_learning_rate)
+        model.compile(loss="mse", optimizer=adam)
+        return critic_input, model
+
+    def train(self, batch):
+        TD_errors = self._advantage_train(batch)
+        # self._train_actor(batch)
+        self.update_targets()
+        return TD_errors
+
+    def _advantage_train(self, batch):
         rewards, states, actions = [], [], []
         batch_idx, samples, ISWeights = batch
+        TD_errors = []
         # print("Critic IS Weights avr: ", np.mean(ISWeights))
         # print("Critic IS Weights min: ", np.amax(ISWeights))
         # print("Critic IS Weights max: ", np.amin(ISWeights))
         # return
         for i in range(len(samples)):
             sample = samples[i]
-
             cur_state, action, reward, new_state, done = sample
-            action_arr = np.zeros(shape=self.action_space)
-            action_arr[action] = 1
-            # print("Reward: ", reward)
+            action_taken = np.zeros(shape=self.action_space)
+            action_taken[action] = 1
+            current_state = self.target_critic_model.predict([[np.array(encode_state(cur_state))]])[0][0]
+            TD_error = reward - current_state
             if not done:
-                target_action = self._encode_action(self.target_actor_model.predict(np.array(([encode_state(new_state)]))))
-                future_state = self.target_critic_model.predict([np.array(([encode_state(new_state)])), target_action])[0][0]
-                current_state = self.target_critic_model.predict([np.array(([encode_state(cur_state)])), target_action])[0][0]
-                reward += self.discount * future_state - current_state
-            actions.append(action_arr)
+                future_state = self.target_critic_model.predict([[np.array((encode_state(new_state)))]])[0][0]
+                reward += self.discount * future_state
+                TD_error += self.discount * future_state
             rewards.append(reward)
             states.append(encode_state(cur_state))
-            # print("TD: ", reward)
-        history = self.critic_model.fit([states, actions], rewards, epochs=2, verbose=0, batch_size=len(samples), sample_weight=ISWeights)
+            TD_errors.append(TD_error)
+
+            weighted_grad = TD_error * ISWeights[i]
+            graded_action = action_taken * weighted_grad
+
+            self.sess.run(self.actor_optimize, feed_dict={
+                self.actor_state_input: [encode_state(cur_state)],
+                self.actor_critic_grad: [graded_action]
+            })
+
+        history = self.critic_model.fit([states], rewards, epochs=2, verbose=0, batch_size=len(samples), sample_weight=ISWeights)
         self.current_loss = history.history['loss']
+        self.current_grad = np.average(TD_errors)
+        return TD_errors
 
     def _train_actor(self, batch):
         tree_index, samples, ISWeights = batch
@@ -139,8 +175,7 @@ class ActorCritic():
             cur_state, action, reward, new_state, _ = sample
             predicted_action = self._encode_action(self.actor_model.predict(np.array(([encode_state(cur_state)]))))
             grads = self.sess.run(self.critic_grads, feed_dict={
-                self.critic_state_input: [encode_state(cur_state)], self.critic_action_input: predicted_action
-            })[0]
+                self.critic_input: [encode_state(cur_state)]})[0]
             weighted_grads = ISWeight * grads
             grads_list.append(np.sum(np.abs(grads)))
             # print("Grads: ", grads)

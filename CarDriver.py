@@ -177,7 +177,7 @@ def run_agent():
 test_run = False
 check_policy = False
 check_values = False
-continue_learning = True
+continue_learning = False
 single_threading = True
 
 
@@ -190,7 +190,8 @@ iteration_limit = 10000
 learning_limit = 15000
 start_from_iteration = 0
 synchronise_every = 10
-learning_rate = 0.0002
+actor_learning_rate = 0.0002
+critic_learning_rate = 0.00001
 
 
 # sess = tf.Graph()
@@ -209,9 +210,12 @@ gamma = 4
 
 environment = Game()
 # environment = gym.make("CartPole-v1")
-memory = VectorizedMemory(1000000, batch_size=batch_size, gamma=gamma, standarized_size=True)
+memory = VectorizedMemory(1500000, batch_size=batch_size, gamma=gamma, standarized_size=True)
+gradient_memory = VectorizedMemory(250)
+loss_memory = VectorizedMemory(250)
 # brain = ActorCritic(sess, environment.action_count, environment.state_count, tau=0.95)
-brain = ActorCritic(sess, len(environment.action_space), state_count, tau=0.95, learning_rate=learning_rate)
+brain = ActorCritic(sess, len(environment.action_space), state_count, tau=0.95, actor_learning_rate=actor_learning_rate,
+                    critic_learning_rate=critic_learning_rate)
 agent = Agent(brain, memory, environment)
 max_steps = 15000
 max_reward = -100000
