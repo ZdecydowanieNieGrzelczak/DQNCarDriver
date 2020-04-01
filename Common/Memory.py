@@ -112,12 +112,13 @@ class VectorizedMemory:
         k = np.where(s > r)
         probabilities = s[k]
         if self.standarized_size:
-            while np.shape(k)[1] < self.batch_size:
-                s[k] = 0
-                r = np.random.rand(prob_matrix.shape[0])
-                k2 = np.where(s > r)
-                np.append(probabilities, s[k2])
-                np.append(k, k2)
+            # while np.shape(k)[1] < self.batch_size:
+            #     print("workin on appending")
+            #     s[k] = 0
+            #     r = np.random.rand(prob_matrix.shape[0])
+            #     k2 = np.where(s > r)
+            #     np.append(probabilities, s[k2])
+            #     np.append(k, k2)
 
             if np.shape(k)[1] > self.batch_size:
                 difference = np.shape(k)[1] - self.batch_size

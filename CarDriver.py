@@ -4,7 +4,7 @@ import keras
 import numpy as np
 from Common.Brain import Brain
 from Common.Memory import Memory, TreeMemory, VectorizedMemory
-from map import Game
+from map import Game, Scribe
 import time
 import threading
 from Common.A2C import ActorCritic
@@ -12,13 +12,16 @@ import keras.backend as K
 import tensorflow as tf
 from BrainAnalizer import BrainAnalizer
 import gym
+from matplotlib import pyplot as PLT
 
 
 class Agent:
+
     def __init__(self, brain, memory, environment):
         self.brain = brain
         self.memory = memory
         self.environment = environment
+        self.total_scribe = Scribe(nr_of_quests=5, nr_of_stations=3, nr_of_locations=15 * 15, is_total=True)
 
         self.state_count = state_count
         self.batch_size = batch_size
@@ -26,12 +29,17 @@ class Agent:
         self.discount = discount
         self.iteration = start_from_iteration
         self.iteration_limit = iteration_limit
+        self.action_buffer = [action for action in range(self.environment.action_count)]
+
 
     def get_current_epsilon(self):
+        epsilon = 0
         if self.iteration < self.iteration_limit:
-            return 1 - 0.9 * (self.iteration / self.iteration_limit)
+            epsilon = 1 - 0.9 * (self.iteration / self.iteration_limit)
         else:
-            return 0.001
+            epsilon = 0.001
+        epsilones.append(epsilon)
+        return epsilon
 
     def getAB(self):
         if self.iteration < learning_limit:
@@ -43,7 +51,9 @@ class Agent:
     def act(self, state):
         if random.random() > self.get_current_epsilon():
             state = self.encode_state(state)
-            action = np.argmax(self.brain.actor_model.predict([[state]]))
+            actions = self.brain.actor_model.predict([[state]])[0]
+            action = np.random.choice(self.action_buffer, p=actions)
+            return 0
         else:
             action = self.environment.sample_move()
             # action = self.environment.action_space.sample()
@@ -106,6 +116,7 @@ class Agent:
         total_reward = 0
         counter = np.zeros(6)
         # start = time.time()
+        steps = max_steps
         for _ in range(max_steps):
             # print("taking step: ", _)
             action = self.act(state)
@@ -118,14 +129,20 @@ class Agent:
 
             state = next_state
             if is_done:
+                steps = _
                 break
         if should_replay:
             alpha, beta = self.getAB()
+            alphas.append(alpha)
+            betas.append(beta)
             batch = memory.run_for_batch(alpha, beta)
             errors = brain.train(batch)
             tree_idx = batch[0]
             for i in range(len(errors)):
                 memory.update_priority(tree_idx[i], errors[i])
+            steps_buffer.append(steps)
+            # self.total_scribe += self.environment.scribe
+            # self.total_scribe += self.environment.scribe
         return total_reward
 
 
@@ -136,6 +153,17 @@ def init_memory(agent, nr_of_iter):
     for _ in range(nr_of_iter):
         agent.run(False)
 
+
+def plot_figures():
+    pass
+    #
+    # line1.set_ydata(grads_buffer)
+    # line2.set_ydata(losses_buffer)
+    # line3.set_ydata(rewards_buffer)
+    # line4.set_ydata([item for item in zip(epsilones, alphas, betas)])
+    # fig.canvas.draw()
+    # PLT.draw()
+    # PLT.show()
 
 
 
@@ -160,16 +188,21 @@ def run_agent():
         reward = agent.run(should_replay=single_threading)
         if reward > max_reward:
             max_reward = reward
+        rewards_buffer.append(reward)
+        losses_buffer.append(agent.brain.current_loss)
+        grads_buffer.append(agent.brain.current_grad)
         agent.iteration += 1
         print("Agent iteration:", agent.iteration)
         print("Current reward: ", reward)
         print("Best reward: {0:.4f}".format(max_reward))
         print(agent.environment.scribe)
-        print("Current loss is equal to: ", np.average(agent.brain.current_loss))
+        print("Current loss is equal to: ",agent.brain.current_loss)
         print("Average actor grad is equal to: ", agent.brain.current_grad)
         print("_____________________")
         if agent.iteration % synchronise_every == 0:
             save_to_json()
+        if agent.iteration % plot_every == 0:
+            plot_figures()
 
 
 
@@ -188,11 +221,12 @@ epsilon_max = 0.999
 discount = 0.995
 iteration_limit = 10000
 learning_limit = 15000
-start_from_iteration = 0
+start_from_iteration = 1
 synchronise_every = 10
+plot_every = 3
 actor_learning_rate = 0.0002
 critic_learning_rate = 0.00001
-
+epsilones, alphas, betas = [], [], []
 
 # sess = tf.Graph()
 sess = tf.compat.v1.Session()
@@ -206,13 +240,30 @@ alpha_min = 0.4
 alpha_max = 0.85
 beta_min = 0.001
 beta_max = 0.85
-gamma = 4
+gamma = 2
+
+########
+grads_buffer = []
+losses_buffer = []
+rewards_buffer = []
+steps_buffer = []
+
+# fig = PLT.figure()
+# ax1 = fig.add_subplot(221)
+# ax2 = fig.add_subplot(222)
+# ax3 = fig.add_subplot(223)
+# ax4 = fig.add_subplot(224)
+# PLT.ion()
+#
+# line1, = ax1.plot(grads_buffer)
+# line2, = ax2.plot(losses_buffer)
+# line3, = ax3.plot(rewards_buffer)
+# line4, = ax4.plot([item for item in zip(epsilones, alphas, betas)])
+
 
 environment = Game()
 # environment = gym.make("CartPole-v1")
 memory = VectorizedMemory(1500000, batch_size=batch_size, gamma=gamma, standarized_size=True)
-gradient_memory = VectorizedMemory(250)
-loss_memory = VectorizedMemory(250)
 # brain = ActorCritic(sess, environment.action_count, environment.state_count, tau=0.95)
 brain = ActorCritic(sess, len(environment.action_space), state_count, tau=0.95, actor_learning_rate=actor_learning_rate,
                     critic_learning_rate=critic_learning_rate)

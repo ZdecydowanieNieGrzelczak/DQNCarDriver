@@ -9,7 +9,6 @@ import random
 from collections import deque
 
 
-
 def encode_state(state):
     map_size = 15
     quest_number = 5
@@ -55,29 +54,31 @@ class ActorCritic():
         self.Is_weight = K.placeholder(1, dtype=tf.float64)
 
         actor_model_weights = self.actor_model.trainable_weights
-        self.actor_grads = tf.gradients(self.actor_model.output, actor_model_weights, -self.actor_critic_grad)
+        self.actor_grads = tf.gradients(self.actor_model.output, actor_model_weights, self.actor_critic_grad)
         grads = zip(self.actor_grads, actor_model_weights)
         self.optimize = tf.keras.optimizers.Adam(self.actor_learning_rate).apply_gradients(grads)
 
-        self.loss_placeholder = K.placeholder(1, dtype=tf.float64)
+        self.advantage_placeholder = K.placeholder(1, dtype=tf.float64)
 
-        self.action_placeholder = K.placeholder([None, self.action_space], dtype=tf.float64)
-
-        loss_actor = -tf.math.log(self.action_placeholder) * self.loss_placeholder
-
-        # self.actor_optimize = tf.keras.optimizers.Adam(self.actor_learning_rate)\
-        #     .minimize(loss_actor,
-        #               var_list=actor_model_weights)
+        self.action_placeholder = K.placeholder(self.action_space, dtype=tf.float64)
 
         self.actor_optimize = tf.keras.optimizers.Adam(self.actor_learning_rate).apply_gradients(grads)
 
         self.critic_input, self.critic_model = self.create_advantage_critic_model((25, 15))
 
+        self.actor_loss = -tf.math.log(self.action_placeholder) * self.advantage_placeholder
+
         _, self.target_critic_model = self.create_advantage_critic_model((25, 15))
 
         # self.critic_grads = tf.gradients(self.critic_model.output, self.critic_input)
         self.critic_advantage_grads = tf.gradients(self.critic_model.output, self.critic_input)
-        # self.critic_grads = tf.gradients(self.critic_model.output, [self.critic_state_input, self.critic_action_input]) moze???
+
+        self.x = K.placeholder(1, tf.float32)
+        self.actor_advantage_grads = tf.gradients(self.actor_loss, self.action_placeholder)
+        self.critic_grads = tf.gradients(self.critic_model.output, self.critic_input)
+
+
+
 
         self.sess.run(tf.compat.v1.global_variables_initializer())
 
@@ -88,7 +89,7 @@ class ActorCritic():
         # h2 = Dense(hidden[1], activation="relu")(h1)
         h3 = Dense(hidden[2], activation="relu")(h1)
 
-        output = Dense(self.action_space, activation="relu")(h3)
+        output = Dense(self.action_space, activation="softmax")(h3)
 
         model = Model(input=state_input, output=output)
         adam = Adam(learning_rate=self.actor_learning_rate)
@@ -143,6 +144,7 @@ class ActorCritic():
             cur_state, action, reward, new_state, done = sample
             action_taken = np.zeros(shape=self.action_space)
             action_taken[action] = 1
+            predicted_action = self.target_actor_model.predict([[np.array(encode_state(cur_state))]])
             current_state = self.target_critic_model.predict([[np.array(encode_state(cur_state))]])[0][0]
             TD_error = reward - current_state
             if not done:
@@ -152,17 +154,24 @@ class ActorCritic():
             rewards.append(reward)
             states.append(encode_state(cur_state))
             TD_errors.append(TD_error)
+            # weighted_action = action_taken * ISWeights[i]  # * TD_error
 
-            weighted_grad = TD_error * ISWeights[i]
-            graded_action = action_taken * weighted_grad
+            grad = self.sess.run(self.actor_advantage_grads, feed_dict= {
+                self.action_placeholder: predicted_action[0],
+                self.advantage_placeholder: [TD_error],
+                self.x: [1]
+                # self.actor_state_input: [encode_state(cur_state)]
+            })[0]
+            weighted_grad = grad * ISWeights[i]
 
-            self.sess.run(self.actor_optimize, feed_dict={
-                self.actor_state_input: [encode_state(cur_state)],
-                self.actor_critic_grad: [graded_action]
+            self.sess.run(self.optimize, feed_dict={
+                self.actor_critic_grad: [weighted_grad],
+                self.actor_state_input: [encode_state(cur_state)]
             })
 
-        history = self.critic_model.fit([states], rewards, epochs=2, verbose=0, batch_size=len(samples), sample_weight=ISWeights)
-        self.current_loss = history.history['loss']
+        history = self.critic_model.fit([states], rewards, epochs=2, verbose=0, batch_size=len(samples),
+                                        sample_weight=ISWeights)
+        self.current_loss = np.average(history.history['loss'])
         self.current_grad = np.average(TD_errors)
         return TD_errors
 

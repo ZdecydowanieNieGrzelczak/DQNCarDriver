@@ -5,18 +5,29 @@ from math import trunc
 
 class Scribe:
 
-    def __init__(self, nr_of_quests, nr_of_stations, nr_of_locations):
+    def __init__(self, nr_of_quests, nr_of_stations, nr_of_locations, is_total=False):
         self.picked = np.zeros(shape=nr_of_quests)
         self.ended = np.zeros(shape=nr_of_quests)
         self.tanked = np.zeros(shape=nr_of_stations)
         self.mobility = np.zeros(shape=nr_of_locations)
+        self.died = np.zeros(shape=nr_of_locations)
+        self.is_total = is_total
 
     def __str__(self):
-        representation = "During run:\n"
+        if self.is_total:
+            representation = "During whole game:\n"
+        else:
+            representation = "During run:\n"
         picked = "Picked: {0:.0f} Q1: {p[0]:.0f} Q2: {p[1]:.0f} Q3: {p[2]:.0f} Q4: {p[3]:.0f} Q5: {p[4]:.0f}\n".format(np.sum(self.picked), p=self.picked)
         ended = "Ended:  {0:.0f} Q1: {p[0]:.0f} Q2: {p[1]:.0f} Q3: {p[2]:.0f} Q4: {p[3]:.0f} Q5: {p[4]:.0f}\n".format(np.sum(self.ended), p=self.ended)
         tanked = "Tanked: {0:.0f} LP1: {p[0]:.0f} LP2: {p[1]:.0f} LP3: {p[2]:.0f}\n".format(np.sum(self.tanked), p=self.tanked)
         return ''.join([representation, picked, ended, tanked])
+
+    def __add__(self, other):
+        self.picked += other.picked
+        self.ended += other.ended
+        self.tanked += other.tanked
+        self.died += other.died
 
 
 
@@ -109,6 +120,7 @@ class Game:
                 # print("no gas")
                 reward -= 100
                 self.is_done = True
+                self.scribe.died[self.player_pos[0] + self.player_pos[1] * 15] += 1
 
         # reward /= self.reward_normalizer
         state = (self.get_state_object(), reward, self.is_done, [])
@@ -242,9 +254,6 @@ class Game:
         self.rewards = rewards
         self.gas_stations = gas_stations
         self.cargo = [0 for i in range(self.quest_nr)]
-
-
-
 
 
 
