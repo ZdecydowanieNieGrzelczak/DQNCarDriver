@@ -13,7 +13,7 @@ from operator import itemgetter
 class VectorizedMemory:
     min_priority = 0.0001
     max_priority = 1
-    initialization_priority = 1
+    initialization_priority = 2
     start = 0
     end = 0
     random.seed(time.time())
@@ -79,6 +79,8 @@ class VectorizedMemory:
             self.append(element)
 
     def update_priority(self, index, error):
+        if self.priority_buffer[index] == 2:
+            return
         priority = np.clip(error / self.gamma, self.min_priority, self.max_priority)
         self.priority_buffer[index] = priority
 
@@ -112,13 +114,6 @@ class VectorizedMemory:
         k = np.where(s > r)
         probabilities = s[k]
         if self.standarized_size:
-            # while np.shape(k)[1] < self.batch_size:
-            #     print("workin on appending")
-            #     s[k] = 0
-            #     r = np.random.rand(prob_matrix.shape[0])
-            #     k2 = np.where(s > r)
-            #     np.append(probabilities, s[k2])
-            #     np.append(k, k2)
 
             if np.shape(k)[1] > self.batch_size:
                 difference = np.shape(k)[1] - self.batch_size
@@ -134,12 +129,13 @@ class VectorizedMemory:
                     new_k = np.asarray(k)
                     k = np.delete(k, (np.random.choice(new_k, difference, replace=False)))
 
-        ISWeights = np.float_power(((1 / len(self)) * (1 / probabilities)), self.working_beta)
+        ISWeights = np.float_power(((1 / self.batch_size) * (1 / probabilities)), self.working_beta)
         if np.shape(k)[0] == 1:
             k = k[0]
         k = k.tolist()
 
         return k, ISWeights
+
 
     def run_for_batch(self, alpha, beta):
         self.alpha = alpha

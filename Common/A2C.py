@@ -21,9 +21,9 @@ def encode_state(state):
     new_state[pos[0]] = 1
     new_state[map_size + pos[1]] = 1
     for i in range(len(cargo)):
-        new_state[map_size * 2 + i] = cargo[i]
+        new_state[map_size ** 2 + i] = cargo[i]
     new_state[-2] = gas / 500
-    new_state[-1] = np.clip(money / 2000, 0, 1)
+    new_state[-1] = np.clip(money / 500, 0, 1)
 
     return new_state
 
@@ -31,6 +31,7 @@ def encode_state(state):
 class ActorCritic():
     current_loss = 0
     current_grad = 0
+    current_IS = 0
 
     def __init__(self, sess, action_space, observation_space, actor_learning_rate=0.0001, critic_learning_rate=0.001,
                  discount=0.999, tau=0.95, hidden=(25, 40, 15)):
@@ -51,8 +52,6 @@ class ActorCritic():
 
         self.actor_critic_grad = K.placeholder([None, self.action_space], dtype=tf.float32)
 
-        self.Is_weight = K.placeholder(1, dtype=tf.float64)
-
         actor_model_weights = self.actor_model.trainable_weights
         self.actor_grads = tf.gradients(self.actor_model.output, actor_model_weights, self.actor_critic_grad)
         grads = zip(self.actor_grads, actor_model_weights)
@@ -70,15 +69,7 @@ class ActorCritic():
 
         _, self.target_critic_model = self.create_advantage_critic_model((25, 15))
 
-        # self.critic_grads = tf.gradients(self.critic_model.output, self.critic_input)
-        self.critic_advantage_grads = tf.gradients(self.critic_model.output, self.critic_input)
-
-        self.x = K.placeholder(1, tf.float32)
         self.actor_advantage_grads = tf.gradients(self.actor_loss, self.action_placeholder)
-        self.critic_grads = tf.gradients(self.critic_model.output, self.critic_input)
-
-
-
 
         self.sess.run(tf.compat.v1.global_variables_initializer())
 
@@ -129,7 +120,7 @@ class ActorCritic():
         TD_errors = self._advantage_train(batch)
         # self._train_actor(batch)
         self.update_targets()
-        return TD_errors
+        return np.abs(TD_errors)
 
     def _advantage_train(self, batch):
         rewards, states, actions = [], [], []
@@ -139,28 +130,25 @@ class ActorCritic():
         # print("Critic IS Weights min: ", np.amax(ISWeights))
         # print("Critic IS Weights max: ", np.amin(ISWeights))
         # return
-        for i in range(len(samples)):
-            sample = samples[i]
+        for i, sample in enumerate(samples):
             cur_state, action, reward, new_state, done = sample
-            action_taken = np.zeros(shape=self.action_space)
-            action_taken[action] = 1
-            predicted_action = self.target_actor_model.predict([[np.array(encode_state(cur_state))]])
+            action_taken = action
+            # predicted_action = self.target_actor_model.predict([[np.array(encode_state(cur_state))]])
             current_state = self.target_critic_model.predict([[np.array(encode_state(cur_state))]])[0][0]
+            # print("original reward:", reward)
             TD_error = reward - current_state
             if not done:
                 future_state = self.target_critic_model.predict([[np.array((encode_state(new_state)))]])[0][0]
                 reward += self.discount * future_state
                 TD_error += self.discount * future_state
+                # print("Future state: ", future_state)
             rewards.append(reward)
             states.append(encode_state(cur_state))
             TD_errors.append(TD_error)
-            # weighted_action = action_taken * ISWeights[i]  # * TD_error
 
             grad = self.sess.run(self.actor_advantage_grads, feed_dict= {
-                self.action_placeholder: predicted_action[0],
+                self.action_placeholder: action_taken,
                 self.advantage_placeholder: [TD_error],
-                self.x: [1]
-                # self.actor_state_input: [encode_state(cur_state)]
             })[0]
             weighted_grad = grad * ISWeights[i]
 
@@ -173,35 +161,8 @@ class ActorCritic():
                                         sample_weight=ISWeights)
         self.current_loss = np.average(history.history['loss'])
         self.current_grad = np.average(TD_errors)
+        self.current_IS = np.average(ISWeights)
         return TD_errors
-
-    def _train_actor(self, batch):
-        tree_index, samples, ISWeights = batch
-        grads_list = []
-        for i in range(len(samples)):
-            sample = samples[i]
-            ISWeight = ISWeights[i]
-            cur_state, action, reward, new_state, _ = sample
-            predicted_action = self._encode_action(self.actor_model.predict(np.array(([encode_state(cur_state)]))))
-            grads = self.sess.run(self.critic_grads, feed_dict={
-                self.critic_input: [encode_state(cur_state)]})[0]
-            weighted_grads = ISWeight * grads
-            grads_list.append(np.sum(np.abs(grads)))
-            # print("Grads: ", grads)
-            if grads_list[-1] != 0:
-                pass
-                # print("Grad: ", grads_list[-1])
-            self.sess.run(self.optimize, feed_dict={
-                self.actor_state_input: [encode_state(cur_state)],
-                self.actor_critic_grad: weighted_grads
-            })
-        self.current_grad = np.average(grads_list)
-        return grads_list
-
-    def _encode_action(self, actions):
-        new_actions = np.zeros(shape=np.shape(actions))
-        new_actions[0][np.argmax(actions)] = 1
-        return new_actions
 
     def update_targets(self):
         self._update_actor_target()
@@ -210,11 +171,7 @@ class ActorCritic():
     def _update_actor_target(self):
         actor_model_weights = self.actor_model.get_weights()
         actor_target_weights = self.target_actor_model.get_weights()
-
         for i in range(len(actor_target_weights)):
-            # print(actor_target_weights[i])
-            # actor_target_weights[i] *= self.tau
-            # actor_target_weights[i] += actor_model_weights[i] * (1 - self.tau)
             actor_target_weights[i] = self.tau * actor_target_weights[i] + actor_model_weights[i] * (1 - self.tau)
         self.target_actor_model.set_weights(actor_target_weights)
 
@@ -224,5 +181,4 @@ class ActorCritic():
 
         for i in range(len(critic_target_weights)):
             critic_target_weights[i] = self.tau * critic_target_weights[i] + critic_model_weights[i] * (1 - self.tau)
-            # critic_target_weights[i] += critic_model_weights[i] * (1 - self.tau)
         self.target_critic_model.set_weights(critic_target_weights)

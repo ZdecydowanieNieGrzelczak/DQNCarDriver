@@ -12,6 +12,7 @@ class Scribe:
         self.mobility = np.zeros(shape=nr_of_locations)
         self.died = np.zeros(shape=nr_of_locations)
         self.is_total = is_total
+        self.invalid_action = 0
 
     def __str__(self):
         if self.is_total:
@@ -21,13 +22,16 @@ class Scribe:
         picked = "Picked: {0:.0f} Q1: {p[0]:.0f} Q2: {p[1]:.0f} Q3: {p[2]:.0f} Q4: {p[3]:.0f} Q5: {p[4]:.0f}\n".format(np.sum(self.picked), p=self.picked)
         ended = "Ended:  {0:.0f} Q1: {p[0]:.0f} Q2: {p[1]:.0f} Q3: {p[2]:.0f} Q4: {p[3]:.0f} Q5: {p[4]:.0f}\n".format(np.sum(self.ended), p=self.ended)
         tanked = "Tanked: {0:.0f} LP1: {p[0]:.0f} LP2: {p[1]:.0f} LP3: {p[2]:.0f}\n".format(np.sum(self.tanked), p=self.tanked)
-        return ''.join([representation, picked, ended, tanked])
+        invalid = "Invalid actions taken: {0}\n".format(self.invalid_action)
+        return ''.join([representation, picked, ended, tanked, invalid])
 
     def __add__(self, other):
         self.picked += other.picked
         self.ended += other.ended
         self.tanked += other.tanked
         self.died += other.died
+        self.invalid_action += other.invalid_action
+
 
 
 
@@ -115,10 +119,8 @@ class Game:
             raise Exception('InvalidAction', action)
         else:
             reward = self.actions[action]()
-            # reward = self.action_special()
             if self.gas <= 0:
-                # print("no gas")
-                reward -= 100
+                reward -= 300
                 self.is_done = True
                 self.scribe.died[self.player_pos[0] + self.player_pos[1] * 15] += 1
 
@@ -133,7 +135,7 @@ class Game:
             self.player_pos[0] -= 1
 
             self.gas -= 1
-            return self.action_special() - 1
+            return self.action_special() - 1 * self.gas_price
 
     def action_down(self):
         if self.player_pos[0] == 14:
@@ -141,7 +143,7 @@ class Game:
         else:
             self.gas -= 1
             self.player_pos[0] += 1
-            return self.action_special() - 1
+            return self.action_special() - 1 * self.gas_price
 
     def action_right(self):
         if self.player_pos[1] == 14:
@@ -149,7 +151,7 @@ class Game:
         else:
             self.gas -= 1
             self.player_pos[1] += 1
-            return self.action_special() - 1
+            return self.action_special() - 1 * self.gas_price
 
     def action_left(self):
         if self.player_pos[1] == 0:
@@ -157,11 +159,12 @@ class Game:
         else:
             self.gas -= 1
             self.player_pos[1] -= 0
-            return self.action_special() - 1
+            return self.action_special() - 1 * self.gas_price
 
     def action_wait(self):
+        self.scribe.invalid_action += 1
         self.gas -= 1 * self.wait_discount
-        return -1 * self.wait_discount
+        return -1 * self.wait_discount * self.gas_price
 
     def action_special(self):
         if self.player_pos in self.quests:

@@ -21,12 +21,7 @@ class BrainAnalizer:
         action_array = np.zeros(shape=(self.action_count,))
         for i in range(self.map_size):
             for j in range(self.map_size):
-                sum = 0
-                for x in range(self.action_count):
-                    action_array[x] = 1
-                    sum += self.brain.critic_model.predict([np.array(([self.encode_state([i, j], cargo, tanked, money, )])), np.array([action_array])])
-                    action_array[x] = 0
-                values_matrix[i][j] = sum / self.action_count
+                values_matrix[i][j] = self.brain.target_critic_model.predict([np.array(([self.encode_state([i, j], cargo, tanked, money, )]))])
         return values_matrix
 
     def encode_state(self, pos, cargo, gas, money):
