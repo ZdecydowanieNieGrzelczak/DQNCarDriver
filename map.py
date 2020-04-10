@@ -13,6 +13,8 @@ class Scribe:
         self.died = np.zeros(shape=nr_of_locations)
         self.is_total = is_total
         self.invalid_action = 0
+        self.steps = 0
+        self.percentage = 0
 
     def __str__(self):
         if self.is_total:
@@ -22,7 +24,12 @@ class Scribe:
         picked = "Picked: {0:.0f} Q1: {p[0]:.0f} Q2: {p[1]:.0f} Q3: {p[2]:.0f} Q4: {p[3]:.0f} Q5: {p[4]:.0f}\n".format(np.sum(self.picked), p=self.picked)
         ended = "Ended:  {0:.0f} Q1: {p[0]:.0f} Q2: {p[1]:.0f} Q3: {p[2]:.0f} Q4: {p[3]:.0f} Q5: {p[4]:.0f}\n".format(np.sum(self.ended), p=self.ended)
         tanked = "Tanked: {0:.0f} LP1: {p[0]:.0f} LP2: {p[1]:.0f} LP3: {p[2]:.0f}\n".format(np.sum(self.tanked), p=self.tanked)
-        invalid = "Invalid actions taken: {0}\n".format(self.invalid_action)
+        if self.steps == 0:
+            invalid = "Invalid actions taken: {0}\n".format(self.invalid_action)
+        else:
+            invalid = "Invalid actions taken: {0} | {1}\nPercentage:{2:.2f}%".format(self.invalid_action, self.steps,
+                                                                                     self.percentage)
+
         return ''.join([representation, picked, ended, tanked, invalid])
 
     def __add__(self, other):
@@ -31,6 +38,10 @@ class Scribe:
         self.tanked += other.tanked
         self.died += other.died
         self.invalid_action += other.invalid_action
+
+    def set_steps(self, steps):
+        self.steps = steps
+        self.percentage = self.invalid_action / self.steps * 100
 
 
 

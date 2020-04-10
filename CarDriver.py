@@ -104,16 +104,17 @@ class Agent:
                 self.observe_with_priority((state, action, reward, next_state, is_done))
             state = next_state
             if is_done:
-                steps = _
+                steps = _ + 1
                 break
         if should_replay:
             alpha, beta = self.getAB()
             batch = memory.run_for_batch(alpha, beta)
             errors = brain.train(batch)
+            # print("size of batch: ", len(errors))
             tree_idx = batch[0]
-            # memory.gamma = np.average(errors)
             for i in range(len(errors)):
                 memory.update_priority(tree_idx[i], errors[i])
+            self.environment.scribe.set_steps(steps)
             steps_buffer.append(steps)
         return total_reward
 
@@ -169,9 +170,8 @@ def save_to_json():
 
 
 def run_agent():
-    max_reward = -10000000000000000
-    best_out_of_ten = -10000000000000000
-    stats = [0, 0, 0]
+    max_reward = -1000000
+    best_out_of_ten = -1000000
     while True:
         reward = agent.run(should_replay=single_threading)
         if reward > max_reward:
@@ -180,7 +180,7 @@ def run_agent():
         losses_buffer.append(agent.brain.current_loss)
         grads_buffer.append(agent.brain.current_grad)
         IS_buffer.append(agent.brain.current_IS)
-        invalid_buffer.append(agent.environment.scribe.invalid_action)
+        invalid_buffer.append(agent.environment.scribe.percentage)
         agent.iteration += 1
         print("Agent iteration:", agent.iteration)
         print("Current reward: ", reward)
@@ -193,6 +193,8 @@ def run_agent():
             save_to_json()
         if agent.iteration % plot_every == 0:
             plot_figures()
+        if agent.iteration % reset_targets_every == 0:
+            agent.brain.copy_targets()
 
 
 
@@ -208,7 +210,7 @@ act_stochaisticly = True
 
 #           H Y P E R            #
 state_count = 37
-batch_size = 800
+batch_size = 400
 epsilon_max = 0.999
 discount = 0.99
 iteration_limit = 10000
@@ -216,8 +218,9 @@ learning_limit = 20000
 start_from_iteration = 1
 synchronise_every = 10
 plot_every = 25
-actor_learning_rate = 0.002
-critic_learning_rate = 0.001
+actor_learning_rate = 0.0002
+critic_learning_rate = 0.0001
+reset_targets_every = 100
 
 # sess = tf.Graph()
 sess = tf.compat.v1.Session()
@@ -231,7 +234,7 @@ alpha_min = 0.4
 alpha_max = 0.85
 beta_min = 0.001
 beta_max = 0.85
-gamma = 16
+gamma = 100
 
 ########
 grads_buffer, total_grads = [], []

@@ -13,7 +13,7 @@ from operator import itemgetter
 class VectorizedMemory:
     min_priority = 0.0001
     max_priority = 1
-    initialization_priority = 2
+    initialization_priority = 1
     start = 0
     end = 0
     random.seed(time.time())
@@ -79,8 +79,6 @@ class VectorizedMemory:
             self.append(element)
 
     def update_priority(self, index, error):
-        if self.priority_buffer[index] == 2:
-            return
         priority = np.clip(error / self.gamma, self.min_priority, self.max_priority)
         self.priority_buffer[index] = priority
 

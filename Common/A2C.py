@@ -21,7 +21,7 @@ def encode_state(state):
     new_state[pos[0]] = 1
     new_state[map_size + pos[1]] = 1
     for i in range(len(cargo)):
-        new_state[map_size ** 2 + i] = cargo[i]
+        new_state[map_size * 2 + i] = cargo[i]
     new_state[-2] = gas / 500
     new_state[-1] = np.clip(money / 500, 0, 1)
 
@@ -46,26 +46,22 @@ class ActorCritic():
         self.observation_space = observation_space
         self.action_space = action_space
         self.empty_action = np.zeros(shape=action_space)
+        self.action_placeholder = K.placeholder(self.action_space, dtype=tf.float64)
 
         self.actor_state_input, self.actor_model = self.create_actor_model(self.hidden)
         _, self.target_actor_model = self.create_actor_model(self.hidden)
+        self.advantage_placeholder = K.placeholder(1, dtype=tf.float64)
 
         self.actor_critic_grad = K.placeholder([None, self.action_space], dtype=tf.float32)
+        self.actor_loss = -tf.math.log(self.action_placeholder) * self.advantage_placeholder
 
         actor_model_weights = self.actor_model.trainable_weights
         self.actor_grads = tf.gradients(self.actor_model.output, actor_model_weights, self.actor_critic_grad)
         grads = zip(self.actor_grads, actor_model_weights)
         self.optimize = tf.keras.optimizers.Adam(self.actor_learning_rate).apply_gradients(grads)
 
-        self.advantage_placeholder = K.placeholder(1, dtype=tf.float64)
-
-        self.action_placeholder = K.placeholder(self.action_space, dtype=tf.float64)
-
-        self.actor_optimize = tf.keras.optimizers.Adam(self.actor_learning_rate).apply_gradients(grads)
 
         self.critic_input, self.critic_model = self.create_advantage_critic_model((25, 15))
-
-        self.actor_loss = -tf.math.log(self.action_placeholder) * self.advantage_placeholder
 
         _, self.target_critic_model = self.create_advantage_critic_model((25, 15))
 
@@ -126,22 +122,16 @@ class ActorCritic():
         rewards, states, actions = [], [], []
         batch_idx, samples, ISWeights = batch
         TD_errors = []
-        # print("Critic IS Weights avr: ", np.mean(ISWeights))
-        # print("Critic IS Weights min: ", np.amax(ISWeights))
-        # print("Critic IS Weights max: ", np.amin(ISWeights))
-        # return
+
         for i, sample in enumerate(samples):
             cur_state, action, reward, new_state, done = sample
             action_taken = action
-            # predicted_action = self.target_actor_model.predict([[np.array(encode_state(cur_state))]])
             current_state = self.target_critic_model.predict([[np.array(encode_state(cur_state))]])[0][0]
-            # print("original reward:", reward)
             TD_error = reward - current_state
             if not done:
                 future_state = self.target_critic_model.predict([[np.array((encode_state(new_state)))]])[0][0]
                 reward += self.discount * future_state
                 TD_error += self.discount * future_state
-                # print("Future state: ", future_state)
             rewards.append(reward)
             states.append(encode_state(cur_state))
             TD_errors.append(TD_error)
@@ -150,7 +140,9 @@ class ActorCritic():
                 self.action_placeholder: action_taken,
                 self.advantage_placeholder: [TD_error],
             })[0]
+
             weighted_grad = grad * ISWeights[i]
+
 
             self.sess.run(self.optimize, feed_dict={
                 self.actor_critic_grad: [weighted_grad],
@@ -159,6 +151,7 @@ class ActorCritic():
 
         history = self.critic_model.fit([states], rewards, epochs=2, verbose=0, batch_size=len(samples),
                                         sample_weight=ISWeights)
+
         self.current_loss = np.average(history.history['loss'])
         self.current_grad = np.average(TD_errors)
         self.current_IS = np.average(ISWeights)
@@ -182,3 +175,7 @@ class ActorCritic():
         for i in range(len(critic_target_weights)):
             critic_target_weights[i] = self.tau * critic_target_weights[i] + critic_model_weights[i] * (1 - self.tau)
         self.target_critic_model.set_weights(critic_target_weights)
+
+    def copy_targets(self):
+        self.target_critic_model.set_weights(self.critic_model.get_weights())
+        self.target_actor_model.set_weights(self.actor_model.get_weights())
